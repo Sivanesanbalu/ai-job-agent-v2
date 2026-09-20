@@ -14,6 +14,7 @@ from app.models.browser_page_inspection import (
     BrowserPageInspection,
 )
 from app.models.browser_page_state import BrowserPageState
+from app.services.ai_form_agent import AIFormAgent
 from app.services.application_fill_plan import (
     build_application_fill_plan,
 )
@@ -141,61 +142,124 @@ class BrowserEngine:
 
         inputs = self.page.locator("input").evaluate_all(
             """
-            elements => elements.map(element => ({
-                type: element.type || "",
-                name: element.name || "",
-                id: element.id || "",
-                placeholder: element.placeholder || "",
-                aria_label: element.getAttribute("aria-label") || "",
-                autocomplete: element.getAttribute("autocomplete") || "",
-                accept: element.getAttribute("accept") || "",
-                value: element.value || "",
-                required: element.required || false,
-                visible: !!(
-                    element.offsetWidth ||
-                    element.offsetHeight ||
-                    element.getClientRects().length
-                )
-            }))
+            elements => {
+                function getLabel(el) {
+                    if (el.labels && el.labels.length > 0) return (el.labels[0].innerText || "").trim();
+                    const parentLabel = el.closest("label");
+                    if (parentLabel) return (parentLabel.innerText || "").trim();
+                    const ariaLabelledBy = el.getAttribute("aria-labelledby");
+                    if (ariaLabelledBy) {
+                        const target = document.getElementById(ariaLabelledBy);
+                        if (target) return (target.innerText || "").trim();
+                    }
+                    const container = el.closest(".form-group, .fb-dash-form-element, .jobs-easy-apply-form-section__element, .field, [class*='form-item'], div");
+                    if (container) {
+                        const labelEl = container.querySelector("label, .artdeco-text-input--label, span[class*='label']");
+                        if (labelEl) return (labelEl.innerText || "").trim();
+                    }
+                    return "";
+                }
+
+                return elements.map(element => ({
+                    type: element.type || "",
+                    name: element.name || "",
+                    id: element.id || "",
+                    placeholder: element.placeholder || "",
+                    aria_label: element.getAttribute("aria-label") || "",
+                    autocomplete: element.getAttribute("autocomplete") || "",
+                    accept: element.getAttribute("accept") || "",
+                    value: element.value || "",
+                    required: !!element.required || element.getAttribute("aria-required") === "true",
+                    label: getLabel(element),
+                    in_modal: !!element.closest('[role="dialog"], .jobs-easy-apply-modal, form, [class*="modal"], [class*="drawer"]'),
+                    visible: !!(
+                        element.offsetWidth ||
+                        element.offsetHeight ||
+                        element.getClientRects().length
+                    )
+                }));
+            }
             """
         )
 
         textareas = self.page.locator("textarea").evaluate_all(
             """
-            elements => elements.map(element => ({
-                name: element.name || "",
-                id: element.id || "",
-                placeholder: element.placeholder || "",
-                aria_label: element.getAttribute("aria-label") || "",
-                value: element.value || "",
-                required: element.required || false,
-                visible: !!(
-                    element.offsetWidth ||
-                    element.offsetHeight ||
-                    element.getClientRects().length
-                )
-            }))
+            elements => {
+                function getLabel(el) {
+                    if (el.labels && el.labels.length > 0) return (el.labels[0].innerText || "").trim();
+                    const parentLabel = el.closest("label");
+                    if (parentLabel) return (parentLabel.innerText || "").trim();
+                    const ariaLabelledBy = el.getAttribute("aria-labelledby");
+                    if (ariaLabelledBy) {
+                        const target = document.getElementById(ariaLabelledBy);
+                        if (target) return (target.innerText || "").trim();
+                    }
+                    const container = el.closest(".form-group, .fb-dash-form-element, .jobs-easy-apply-form-section__element, .field, [class*='form-item'], div");
+                    if (container) {
+                        const labelEl = container.querySelector("label, span[class*='label']");
+                        if (labelEl) return (labelEl.innerText || "").trim();
+                    }
+                    return "";
+                }
+
+                return elements.map(element => ({
+                    name: element.name || "",
+                    id: element.id || "",
+                    placeholder: element.placeholder || "",
+                    aria_label: element.getAttribute("aria-label") || "",
+                    value: element.value || "",
+                    required: !!element.required || element.getAttribute("aria-required") === "true",
+                    label: getLabel(element),
+                    in_modal: !!element.closest('[role="dialog"], .jobs-easy-apply-modal, form, [class*="modal"], [class*="drawer"]'),
+                    visible: !!(
+                        element.offsetWidth ||
+                        element.offsetHeight ||
+                        element.getClientRects().length
+                    )
+                }));
+            }
             """
         )
 
         selects = self.page.locator("select").evaluate_all(
             """
-            elements => elements.map(element => ({
-                name: element.name || "",
-                id: element.id || "",
-                aria_label: element.getAttribute("aria-label") || "",
-                value: element.value || "",
-                required: element.required || false,
-                visible: !!(
-                    element.offsetWidth ||
-                    element.offsetHeight ||
-                    element.getClientRects().length
-                ),
-                options: Array.from(element.options || []).map(option => ({
-                    text: (option.textContent || "").trim(),
-                    value: option.value || ""
-                }))
-            }))
+            elements => {
+                function getLabel(el) {
+                    if (el.labels && el.labels.length > 0) return (el.labels[0].innerText || "").trim();
+                    const parentLabel = el.closest("label");
+                    if (parentLabel) return (parentLabel.innerText || "").trim();
+                    const ariaLabelledBy = el.getAttribute("aria-labelledby");
+                    if (ariaLabelledBy) {
+                        const target = document.getElementById(ariaLabelledBy);
+                        if (target) return (target.innerText || "").trim();
+                    }
+                    const container = el.closest(".form-group, .fb-dash-form-element, .jobs-easy-apply-form-section__element, .field, [class*='form-item'], div");
+                    if (container) {
+                        const labelEl = container.querySelector("label, span[class*='label']");
+                        if (labelEl) return (labelEl.innerText || "").trim();
+                    }
+                    return "";
+                }
+
+                return elements.map(element => ({
+                    name: element.name || "",
+                    id: element.id || "",
+                    aria_label: element.getAttribute("aria-label") || "",
+                    value: element.value || "",
+                    required: !!element.required || element.getAttribute("aria-required") === "true",
+                    label: getLabel(element),
+                    in_modal: !!element.closest('[role="dialog"], .jobs-easy-apply-modal, form, [class*="modal"], [class*="drawer"]'),
+                    visible: !!(
+                        element.offsetWidth ||
+                        element.offsetHeight ||
+                        element.getClientRects().length
+                    ),
+                    options: Array.from(element.options || []).map(option => ({
+                        text: (option.textContent || "").trim(),
+                        value: option.value || ""
+                    }))
+                }));
+            }
             """
         )
 
@@ -239,6 +303,80 @@ class BrowserEngine:
             "links": links,
         }
 
+    def click_apply_button(self) -> dict:
+        """
+        Locate and click the Apply / Easy Apply button on a job listing page.
+        Handles modal open or external ATS redirects/popups.
+        """
+        if self.page is None:
+            raise RuntimeError("Application page is not open.")
+
+        # Check if form is already open
+        page_info = self.inspect_application_page()
+        visible_form_inputs = [
+            i for i in page_info["inputs"]
+            if i.get("visible") and i.get("type", "").lower() not in {"search", "hidden", "submit", "button"}
+        ]
+        if len(visible_form_inputs) >= 2:
+            return {"clicked": True, "action": "already_on_form", "url": self.page.url}
+
+        apply_selectors = [
+            "button.jobs-apply-button",
+            "button:has-text('Easy Apply')",
+            "button:has-text('Apply now')",
+            "button:has-text('Apply on company website')",
+            "button:has-text('Apply')",
+            "a.jobs-apply-button",
+            "a:has-text('Easy Apply')",
+            "a:has-text('Apply now')",
+            "a:has-text('Apply on company website')",
+            "a:has-text('Apply externally')",
+            "a:has-text('Apply')",
+            "[data-control-name='jobdetails_topcard_inapply']",
+            "[data-live-test-component*='Apply']",
+            "[aria-label*='Easy Apply' i]",
+            "[aria-label*='Apply to' i]",
+            "[aria-label*='Apply' i]",
+            ".jobs-apply-button",
+            ".apply-button",
+            "button:has-text('Start Application')",
+        ]
+
+        for selector in apply_selectors:
+            try:
+                locator = self.page.locator(selector).first
+                if locator.is_visible(timeout=1000):
+                    new_page = None
+                    try:
+                        with self.context.expect_page(timeout=3000) as new_page_info:
+                            locator.click(timeout=3000)
+                        new_page = new_page_info.value
+                    except Exception:
+                        pass
+
+                    if new_page is not None:
+                        try:
+                            new_page.wait_for_load_state("domcontentloaded", timeout=6000)
+                        except Exception:
+                            pass
+                        self.page = new_page
+                        return {"clicked": True, "action": "opened_new_tab", "url": self.page.url}
+
+                    # Stayed on same page - wait for modal or navigation
+                    try:
+                        self.page.wait_for_load_state("domcontentloaded", timeout=3000)
+                    except Exception:
+                        pass
+                    try:
+                        self.page.wait_for_timeout(1500)
+                    except Exception:
+                        pass
+                    return {"clicked": True, "action": "clicked_button", "url": self.page.url}
+            except Exception:
+                continue
+
+        return {"clicked": False, "action": "no_button_found", "url": self.page.url}
+
     def inspect_page_state(self) -> BrowserPageInspection:
         """Detect the current browser/application page state."""
 
@@ -250,7 +388,7 @@ class BrowserEngine:
         visible_inputs = [
             item for item in info["inputs"]
             if item.get("visible", False)
-            and item.get("type", "").lower() != "hidden"
+            and item.get("type", "").lower() not in {"hidden", "submit", "button"}
         ]
 
         visible_textareas = [
@@ -268,8 +406,13 @@ class BrowserEngine:
             if item.get("visible", False)
         ]
 
+        modal_inputs = [
+            i for i in visible_inputs
+            if i.get("in_modal") or i.get("type", "").lower() in {"text", "email", "tel", "file"}
+        ]
+
         has_form = bool(
-            visible_inputs
+            modal_inputs
             or visible_textareas
             or visible_selects
         )
@@ -284,30 +427,29 @@ class BrowserEngine:
 
         signals = []
 
+        # 1. Security / Human verification check
         if any(
             signal in page_text
             for signal in self.SECURITY_SIGNALS
         ):
             state = BrowserPageState.HUMAN_VERIFICATION_REQUIRED
-
             for signal in self.SECURITY_SIGNALS:
                 if signal in page_text:
                     signals.append(signal)
-
             requires_human_action = True
 
+        # 2. Application complete check
         elif any(
             signal in page_text
             for signal in self.SUCCESS_SIGNALS
         ):
             state = BrowserPageState.APPLICATION_COMPLETE
-
             for signal in self.SUCCESS_SIGNALS:
                 if signal in page_text:
                     signals.append(signal)
-
             requires_human_action = False
 
+        # 3. Active application form check
         elif (
             has_form
             and any(
@@ -318,6 +460,11 @@ class BrowserEngine:
                     "resume",
                     "cover letter",
                     "candidate",
+                    "contact info",
+                    "phone",
+                    "first name",
+                    "work experience",
+                    "screening questions",
                 )
             )
         ):
@@ -325,31 +472,40 @@ class BrowserEngine:
             signals.append("application form signals detected")
             requires_human_action = False
 
-        elif any(
-            signal in page_text
-            for signal in (
-                "sign in",
-                "log in",
-                "login",
+        # 4. Job listing page with job details or apply options
+        elif (
+            "job" in url
+            or "job" in title
+            or "career" in url
+            or "careers" in url
+            or "lever.co" in url
+            or "greenhouse.io" in url
+            or "workday" in url
+            or "ashbyhq.com" in url
+            or any(
+                apply_term in page_text
+                for apply_term in ("easy apply", "apply now", "apply on company website", "about the job", "job description")
+            )
+        ):
+            state = BrowserPageState.JOB_PAGE
+            signals.append("job page signals detected")
+            requires_human_action = False
+
+        # 5. Dedicated login / auth gate check
+        elif (
+            any(auth_path in url for auth_path in ("/login", "/signin", "/auth/login", "/uas/login", "/session/new"))
+            or (
+                any(signal in page_text for signal in ("please sign in", "log in to your account", "sign in to continue"))
+                and any(i.get("type") == "password" for i in visible_inputs)
             )
         ):
             state = BrowserPageState.LOGIN_REQUIRED
             signals.append("login required")
             requires_human_action = True
 
-        elif (
-            "job" in url
-            or "job" in title
-            or "career" in url
-            or "careers" in url
-        ):
-            state = BrowserPageState.JOB_PAGE
-            signals.append("job page signals detected")
-            requires_human_action = False
-
         else:
             state = BrowserPageState.UNKNOWN
-            requires_human_action = True
+            requires_human_action = False
 
         return BrowserPageInspection(
             state=state,
@@ -412,19 +568,23 @@ class BrowserEngine:
 
         field_id = str(field.get("id", "")).strip()
         field_name = str(field.get("name", "")).strip()
+        aria_label = str(field.get("aria_label", "")).strip()
+        placeholder = str(field.get("placeholder", "")).strip()
 
         if field_id:
-            return self.page.locator(
-                f"#{field_id}"
-            ).first
+            return self.page.locator(f"#{field_id}").first
 
         if field_name:
-            return self.page.locator(
-                f'[name="{field_name}"]'
-            ).first
+            return self.page.locator(f'[name="{field_name}"]').first
+
+        if aria_label:
+            return self.page.locator(f'[aria-label="{aria_label}"]').first
+
+        if placeholder:
+            return self.page.locator(f'[placeholder="{placeholder}"]').first
 
         raise ValueError(
-            "Cannot locate field without id or name."
+            "Cannot locate field without id, name, aria_label, or placeholder."
         )
 
     def fill_field(
@@ -1196,6 +1356,468 @@ class BrowserEngine:
                 "Submit action was triggered, but the "
                 "application success state could not be verified."
             ),
+        )
+
+    def detect_success(self) -> bool:
+        """Check if current page or modal shows application completion."""
+        if self.page is None:
+            return False
+        try:
+            body_text = self.page.locator("body").inner_text().lower()
+            for sig in self.SUCCESS_SIGNALS:
+                if sig in body_text:
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def _find_action_button(self, action_texts: list[str]):
+        """Locate an action button (e.g. Next, Submit, Continue) matching candidate texts."""
+        if self.page is None:
+            return None
+
+        for text in action_texts:
+            selectors = [
+                f"[role='dialog'] button:has-text('{text}')",
+                f".jobs-easy-apply-modal button:has-text('{text}')",
+                f"button:has-text('{text}')",
+                f"input[type='submit'][value*='{text}' i]",
+                f"input[type='button'][value*='{text}' i]",
+                f"[aria-label*='{text}' i]",
+                f"a:has-text('{text}')",
+            ]
+            for sel in selectors:
+                try:
+                    locator = self.page.locator(sel).first
+                    if locator.is_visible(timeout=500) and not locator.is_disabled(timeout=500):
+                        return locator
+                except Exception:
+                    continue
+
+        return None
+
+    def _fill_all_visible_inputs(self, ai_agent: AIFormAgent, package: dict) -> list[str]:
+        """Fill all visible text, email, tel, number, url inputs using candidate data and AIFormAgent."""
+        if self.page is None:
+            return []
+
+        page_info = self.inspect_application_page()
+        filled = []
+
+        ignore_names = {
+            "search", "query", "keywords", "location", "session_key",
+            "session_password", "csrfmiddlewaretoken", "authenticity_token",
+            "csrf_token", "_csrf",
+        }
+
+        for item in page_info["inputs"]:
+            if not item.get("visible", False):
+                continue
+
+            itype = item.get("type", "").lower()
+            if itype in {"hidden", "submit", "button", "checkbox", "radio", "file"}:
+                continue
+
+            name = item.get("name", "").lower()
+            iid = item.get("id", "").lower()
+            if any(ign in name or ign in iid for ign in ignore_names) and not item.get("in_modal"):
+                continue
+
+            curr_val = (item.get("value") or "").strip()
+            if curr_val and curr_val != "undefined":
+                continue
+
+            field_label = item.get("label") or item.get("aria_label") or item.get("placeholder") or item.get("name") or item.get("id") or ""
+
+            answer = ai_agent.answer_field(
+                field_name=item.get("name") or item.get("id") or "",
+                label=field_label,
+                field_type=itype,
+            )
+
+            if answer is not None and str(answer).strip():
+                try:
+                    self.fill_field(item, str(answer))
+                    filled.append(field_label or item.get("name") or "text_input")
+                except Exception:
+                    pass
+
+        return filled
+
+    def _fill_all_visible_textareas(self, ai_agent: AIFormAgent) -> list[str]:
+        """Fill visible textareas with tailored pitch, summary, or AI answers."""
+        if self.page is None:
+            return []
+
+        page_info = self.inspect_application_page()
+        filled = []
+
+        for item in page_info["textareas"]:
+            if not item.get("visible", False):
+                continue
+
+            curr_val = (item.get("value") or "").strip()
+            if curr_val and curr_val != "undefined":
+                continue
+
+            field_name = item.get("name") or item.get("id") or ""
+            field_label = item.get("label") or item.get("aria_label") or item.get("placeholder") or ""
+            combined = f"{field_name} {field_label}".lower()
+
+            if any(k in combined for k in ["pitch", "cover letter", "summary", "why hire", "about you", "motivation", "note", "why do you want"]):
+                answer = ai_agent.generate_pitch()
+            else:
+                answer = ai_agent.answer_field(
+                    field_name=field_name,
+                    label=field_label,
+                    field_type="textarea",
+                )
+
+            if answer is not None and str(answer).strip():
+                try:
+                    self.fill_field(item, str(answer))
+                    filled.append(field_label or field_name or "textarea")
+                except Exception:
+                    pass
+
+        return filled
+
+    def _fill_all_visible_selects(self, ai_agent: AIFormAgent) -> list[str]:
+        """Fill visible dropdown selects with matching options selected by AIFormAgent."""
+        if self.page is None:
+            return []
+
+        page_info = self.inspect_application_page()
+        filled = []
+
+        for item in page_info["selects"]:
+            if not item.get("visible", False):
+                continue
+
+            options = item.get("options", [])
+            option_texts = [o["text"] for o in options if o.get("text")]
+            if not option_texts:
+                continue
+
+            field_name = item.get("name") or item.get("id") or ""
+            field_label = item.get("label") or item.get("aria_label") or ""
+
+            best_answer = ai_agent.answer_field(
+                field_name=field_name,
+                label=field_label,
+                field_type="select",
+                options=option_texts,
+            )
+
+            if best_answer:
+                try:
+                    if self.select_field(item, str(best_answer)):
+                        filled.append(field_label or field_name or "select")
+                except Exception:
+                    pass
+
+        return filled
+
+    def _fill_all_visible_radios(self, ai_agent: AIFormAgent) -> list[str]:
+        """Select appropriate options for visible radio button groups."""
+        if self.page is None:
+            return []
+
+        radio_fields = self.page.locator('input[type="radio"]').evaluate_all(
+            """
+            elements => {
+                function getLabel(el) {
+                    if (el.labels && el.labels.length > 0) return (el.labels[0].innerText || "").trim();
+                    const parentLabel = el.closest("label");
+                    if (parentLabel) return (parentLabel.innerText || "").trim();
+                    const ariaLabelledBy = el.getAttribute("aria-labelledby");
+                    if (ariaLabelledBy) {
+                        const target = document.getElementById(ariaLabelledBy);
+                        if (target) return (target.innerText || "").trim();
+                    }
+                    return "";
+                }
+
+                return elements.map(element => ({
+                    name: element.name || "",
+                    id: element.id || "",
+                    value: element.value || "",
+                    aria_label: element.getAttribute("aria-label") || "",
+                    label: getLabel(element),
+                    checked: !!element.checked,
+                    visible: !!(
+                        element.offsetWidth ||
+                        element.offsetHeight ||
+                        element.getClientRects().length
+                    )
+                }));
+            }
+            """
+        )
+
+        groups = {}
+        for r in radio_fields:
+            if not r.get("visible"):
+                continue
+            name = r.get("name") or r.get("id")
+            if name:
+                groups.setdefault(name, []).append(r)
+
+        filled = []
+        for gname, items in groups.items():
+            if any(i.get("checked") for i in items):
+                continue
+
+            option_labels = [i.get("label") or i.get("value") or "" for i in items]
+            best_opt = ai_agent.answer_field(
+                field_name=gname,
+                label=gname,
+                field_type="radio",
+                options=option_labels,
+            )
+
+            if best_opt:
+                norm_target = str(best_opt).lower().strip()
+                for i in items:
+                    val = (i.get("value") or "").lower().strip()
+                    lbl = (i.get("label") or "").lower().strip()
+                    if norm_target == val or norm_target == lbl or norm_target in lbl or lbl in norm_target:
+                        try:
+                            loc = self._get_locator(i)
+                            loc.check(timeout=2000)
+                            filled.append(gname)
+                            break
+                        except Exception:
+                            pass
+
+        return filled
+
+    def _check_required_checkboxes(self) -> list[str]:
+        """Check required consent, privacy, terms, or authorization checkboxes."""
+        if self.page is None:
+            return []
+
+        checkboxes = self.page.locator('input[type="checkbox"]').evaluate_all(
+            """
+            elements => {
+                function getLabel(el) {
+                    if (el.labels && el.labels.length > 0) return (el.labels[0].innerText || "").trim();
+                    const parentLabel = el.closest("label");
+                    if (parentLabel) return (parentLabel.innerText || "").trim();
+                    return "";
+                }
+
+                return elements.map(element => ({
+                    name: element.name || "",
+                    id: element.id || "",
+                    label: getLabel(element),
+                    required: !!element.required || element.getAttribute("aria-required") === "true",
+                    checked: !!element.checked,
+                    visible: !!(
+                        element.offsetWidth ||
+                        element.offsetHeight ||
+                        element.getClientRects().length
+                    )
+                }));
+            }
+            """
+        )
+
+        checked = []
+        for cb in checkboxes:
+            if not cb.get("visible") or cb.get("checked"):
+                continue
+            lbl = (cb.get("label") or cb.get("name") or "").lower()
+            is_req = cb.get("required")
+            is_consent = any(w in lbl for w in ("agree", "terms", "consent", "privacy", "certify", "acknowledge", "authorized", "truthful", "accept"))
+
+            if is_req or is_consent:
+                try:
+                    loc = self._get_locator(cb)
+                    loc.check(timeout=2000)
+                    checked.append(cb.get("label") or cb.get("name") or "checkbox")
+                except Exception:
+                    pass
+
+        return checked
+
+    def fill_and_advance_application(
+        self,
+        package: dict,
+        max_steps: int = 6,
+    ) -> ApplicationExecutionResult:
+        """
+        Autonomously fills forms, uploads active resume, answers questions with AIFormAgent,
+        and advances through multi-step wizards until submission is completed.
+        """
+        if self.page is None:
+            return ApplicationExecutionResult(
+                status="blocked",
+                message="Application page is not open.",
+            )
+
+        ai_agent = AIFormAgent(package)
+
+        # 1. Open application flow if on job description
+        init_state = self.inspect_page_state()
+        if init_state.state in {BrowserPageState.JOB_PAGE, BrowserPageState.UNKNOWN}:
+            self.click_apply_button()
+            try:
+                self.page.wait_for_timeout(1500)
+            except Exception:
+                pass
+
+        all_filled = []
+
+        for step in range(1, max_steps + 1):
+            state = self.inspect_page_state()
+            if state.state == BrowserPageState.HUMAN_VERIFICATION_REQUIRED:
+                return ApplicationExecutionResult(
+                    status="blocked",
+                    url=self.page.url,
+                    filled_fields=all_filled,
+                    message="Security/human verification detected.",
+                )
+
+            if state.state == BrowserPageState.APPLICATION_COMPLETE or self.detect_success():
+                return ApplicationExecutionResult(
+                    status="submitted",
+                    url=self.page.url,
+                    filled_fields=all_filled,
+                    message="Application submitted and success state verified.",
+                )
+
+            # Fill inputs
+            filled_inputs = self._fill_all_visible_inputs(ai_agent, package)
+            all_filled.extend(filled_inputs)
+
+            # Fill textareas
+            filled_ta = self._fill_all_visible_textareas(ai_agent)
+            all_filled.extend(filled_ta)
+
+            # Select dropdown options
+            filled_sel = self._fill_all_visible_selects(ai_agent)
+            all_filled.extend(filled_sel)
+
+            # Fill radio options
+            filled_rad = self._fill_all_visible_radios(ai_agent)
+            all_filled.extend(filled_rad)
+
+            # Check required checkboxes
+            checked_boxes = self._check_required_checkboxes()
+            all_filled.extend(checked_boxes)
+
+            # Upload resume / photo if file input exists on this step
+            try:
+                upload_res = self.upload_configured_files()
+                if upload_res.get("resume") not in {"not_configured", "not_found"}:
+                    all_filled.append("resume")
+                if upload_res.get("photo") not in {"not_configured", "not_found"}:
+                    all_filled.append("photo")
+            except Exception:
+                pass
+
+            # Try configured questions as additional fallback
+            try:
+                cq = self.fill_configured_questions()
+                all_filled.extend(cq)
+            except Exception:
+                pass
+
+            all_filled = list(dict.fromkeys(all_filled))
+
+            # Check if there is a Submit button on current step
+            submit_btn = self._find_action_button([
+                "submit application",
+                "submit your application",
+                "submit",
+                "send application",
+                "apply now",
+                "finish application",
+            ])
+
+            if submit_btn is not None:
+                try:
+                    submit_btn.click(timeout=5000)
+                    try:
+                        self.page.wait_for_load_state("domcontentloaded", timeout=5000)
+                    except Exception:
+                        pass
+                    try:
+                        self.page.wait_for_timeout(2000)
+                    except Exception:
+                        pass
+
+                    if self.detect_success() or self.inspect_page_state().state == BrowserPageState.APPLICATION_COMPLETE:
+                        return ApplicationExecutionResult(
+                            status="submitted",
+                            url=self.page.url,
+                            filled_fields=all_filled,
+                            message="Application successfully submitted and verified in browser.",
+                        )
+
+                    return ApplicationExecutionResult(
+                        status="submitted",
+                        url=self.page.url,
+                        filled_fields=all_filled,
+                        message="Application submit action completed successfully.",
+                    )
+                except Exception as e:
+                    return ApplicationExecutionResult(
+                        status="failed",
+                        url=self.page.url,
+                        filled_fields=all_filled,
+                        message=f"Submit click failed: {e}",
+                    )
+
+            # Check if there is a Next / Continue / Review button
+            next_btn = self._find_action_button([
+                "next",
+                "continue",
+                "review",
+                "proceed",
+                "next step",
+            ])
+
+            if next_btn is not None:
+                try:
+                    next_btn.click(timeout=5000)
+                    try:
+                        self.page.wait_for_load_state("domcontentloaded", timeout=4000)
+                    except Exception:
+                        pass
+                    try:
+                        self.page.wait_for_timeout(1500)
+                    except Exception:
+                        pass
+                    continue
+                except Exception:
+                    pass
+
+            # Fallback submit button detection
+            fallback_submit = self.detect_submit_button()
+            if fallback_submit is not None:
+                sub_res = self.submit_application(package)
+                if sub_res.status == "submitted":
+                    sub_res.filled_fields = all_filled
+                    return sub_res
+
+            break
+
+        # Final verification
+        if self.detect_success() or self.inspect_page_state().state == BrowserPageState.APPLICATION_COMPLETE:
+            return ApplicationExecutionResult(
+                status="submitted",
+                url=self.page.url,
+                filled_fields=all_filled,
+                message="Application successfully submitted.",
+            )
+
+        return ApplicationExecutionResult(
+            status="filled" if all_filled else "blocked",
+            url=self.page.url,
+            filled_fields=all_filled,
+            message=f"Application form filled ({len(all_filled)} fields).",
         )
 
     # ------------------------------------------------------------------

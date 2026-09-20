@@ -164,6 +164,37 @@ class BrowserExecutor(ApplicationExecutor):
 
         return result
 
+    def click_apply_button(self) -> dict:
+        """Click apply button if adapter exposes click_apply_button."""
+        if self.adapter is None:
+            return {"clicked": False, "reason": "Application page is not open."}
+        return self.adapter.click_apply_button()
+
+    def fill_and_advance_application(
+        self,
+        package: dict,
+        max_steps: int = 6,
+    ) -> ApplicationExecutionResult:
+        """Autonomously fill forms, upload resume, and advance multi-step wizards until submitted."""
+        if self.adapter is None:
+            return ApplicationExecutionResult(
+                status="blocked",
+                message="Application page is not open.",
+            )
+
+        result = self.adapter.fill_and_advance_application(
+            package,
+            max_steps=max_steps,
+        )
+
+        if package is not None:
+            if result.job_title is None and "job" in package:
+                result.job_title = package["job"].get("title")
+            if result.company is None and "job" in package:
+                result.company = package["job"].get("company")
+
+        return result
+
     def submit_application(
         self,
         package: dict | None = None,

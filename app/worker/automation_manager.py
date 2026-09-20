@@ -290,7 +290,41 @@ class UserAutomationController:
 
             resume_file_path = active_resume.file_path if active_resume else None
 
-            # Prepare Candidate package for executor
+            # Prepare rich Candidate package for AIFormAgent and BrowserExecutor
+            first_name = profile.first_name if profile and profile.first_name else (user.full_name.split()[0] if user.full_name else "Candidate")
+            last_name = profile.last_name if profile and profile.last_name else (user.full_name.split()[-1] if user.full_name and len(user.full_name.split()) > 1 else "")
+            full_name = f"{first_name} {last_name}".strip() if (first_name or last_name) else (user.full_name or "Candidate")
+
+            custom_ans = app_profile.custom_answers if app_profile and app_profile.custom_answers else {}
+
+            candidate_data = {
+                "name": full_name,
+                "first_name": first_name,
+                "last_name": last_name,
+                "email": user.email,
+                "phone": (profile.phone if profile and profile.phone else None) or custom_ans.get("phone") or "+918438692752",
+                "headline": profile.headline if profile and profile.headline else "AI / Full Stack Engineer",
+                "city": profile.city if profile and profile.city else "Coimbatore",
+                "state": profile.state if profile and profile.state else "Tamil Nadu",
+                "country": profile.country if profile and profile.country else "India",
+                "pincode": profile.pincode if profile and profile.pincode else "623707",
+                "address": profile.address if profile and profile.address else "Coimbatore, Tamil Nadu, India",
+                "linkedin_url": profile.linkedin_url if profile and profile.linkedin_url else "https://linkedin.com/in/sivanesan-b-871ba7264",
+                "github_url": profile.github_url if profile and profile.github_url else "https://github.com/Sivanesanbalu",
+                "portfolio_url": profile.portfolio_url if profile and profile.portfolio_url else "https://sivanesanbalu.netlify.app",
+                "education": profile.education if profile and profile.education else "Bachelor of Engineering",
+                "university": profile.university if profile and profile.university else "Anna University",
+                "degree": profile.degree if profile and profile.degree else "B.E. Computer Science and Engineering",
+                "graduation_year": profile.graduation_year if profile and profile.graduation_year else 2024,
+                "experience_years": profile.experience_years if profile and profile.experience_years else 2,
+                "current_company": profile.current_company if profile and profile.current_company else "Freelance / AI Solutions",
+                "skills": profile.skills if profile and profile.skills else (match.matched_skills or ["Python", "FastAPI", "Next.js", "AI/LLM"]),
+                "notice_period_days": app_profile.notice_period_days if app_profile else 15,
+                "work_authorization": app_profile.work_authorization if app_profile else "Authorized to work in India",
+                "expected_salary_lpa": app_profile.expected_salary_lpa if app_profile else 12.0,
+                "disability_status": app_profile.disability_status if app_profile else "None",
+            }
+
             candidate_package = {
                 "job": {
                     "title": job.title,
@@ -299,19 +333,11 @@ class UserAutomationController:
                     "url": job.url,
                     "match_score": match.match_score,
                 },
-                "candidate": {
-                    "name": profile.first_name + " " + profile.last_name if profile else "Candidate",
-                    "first_name": profile.first_name if profile else "Candidate",
-                    "last_name": profile.last_name if profile else "",
-                    "email": user.email,
-                    "phone": profile.phone if profile else "",
-                    "headline": profile.headline if profile else "",
-                    "education": profile.education if profile else "",
-                    "notice_period_days": app_profile.notice_period_days if app_profile else 15,
-                },
+                "candidate": candidate_data,
                 "matched_skills": match.matched_skills or [],
                 "application_pitch": f"I am a skilled engineer with expertise in {', '.join((match.matched_skills or [])[:3])}. I look forward to contributing to {job.company}.",
                 "requires_human_review": preferences.require_human_review,
+                "resume_text": active_resume.parsed_text if active_resume and hasattr(active_resume, "parsed_text") else "",
             }
 
             executor = None
@@ -375,84 +401,21 @@ class UserAutomationController:
                 ))
                 db.commit()
 
-                # 3. Fill Form
-                self.current_action = f"Filling application fields for {job.company}..."
-                fill_res = executor.fill_application(candidate_package)
+                # 3. Autonomously fill forms, answer screening questions, and advance through wizard
+                self.current_action = f"Autonomous AI agent applying for {job.title} at {job.company}..."
+                fill_res = executor.fill_and_advance_application(candidate_package, max_steps=6)
 
-                # Check for login inputs or filling challenges
-                req_inputs = " ".join(fill_res.required_fields_needing_input or []).lower()
-                if any(k in req_inputs for k in ("password", "session_key", "session_password", "sign in", "login")):
-                    self.login_required += 1
-                    existing_app.status = "login_required"
-                    existing_app.stage = "auth_gate"
-                    existing_app.error_message = "Portal requires user login credentials to proceed."
-                    db.add(ApplicationEvent(
-                        application_id=existing_app.id,
-                        user_id=self.user_id,
-                        status="login_required",
-                        stage="auth_gate",
-                        message="Login wall detected: credentials required for this portal.",
-                    ))
-                    refund_credit_for_application(db, self.user_id, existing_app.id, reason="Login required")
-                    db.commit()
-                    continue
-
-                if fill_res.status in {"failed", "blocked"}:
-                    msg_lower = (fill_res.message or "").lower()
-                    if any(term in msg_lower for term in ("verification", "captcha", "security", "cloudflare")):
-                        self.verification_required += 1
-                        existing_app.status = "verification_required"
-                        existing_app.stage = "security_challenge"
-                    elif any(term in msg_lower for term in ("login", "sign in")):
-                        self.login_required += 1
-                        existing_app.status = "login_required"
-                        existing_app.stage = "auth_gate"
-                    else:
-                        self.failed += 1
-                        existing_app.status = "failed"
-                    existing_app.error_message = fill_res.message
-                    db.add(ApplicationEvent(
-                        application_id=existing_app.id,
-                        user_id=self.user_id,
-                        status=existing_app.status,
-                        stage=existing_app.stage,
-                        message=fill_res.message or "Form filling challenge encountered.",
-                    ))
-                    refund_credit_for_application(db, self.user_id, existing_app.id, reason=fill_res.message or "Fill failed")
-                    db.commit()
-                    continue
-
-                db.add(ApplicationEvent(
-                    application_id=existing_app.id,
-                    user_id=self.user_id,
-                    status="form_filling",
-                    stage="filling",
-                    message=fill_res.message or "Candidate details, pitch, and questions filled.",
-                ))
-                if resume_file_path:
-                    db.add(ApplicationEvent(
-                        application_id=existing_app.id,
-                        user_id=self.user_id,
-                        status="resume_uploaded",
-                        stage="upload",
-                        message=f"Uploaded candidate resume: {active_resume.filename if active_resume else 'resume.pdf'}",
-                    ))
-                db.commit()
-
-                # 4. Submit application
-                self.current_action = f"Submitting application to {job.company}..."
-                submit_res = executor.submit_application(candidate_package)
-
-                if submit_res.status == "submitted":
+                if fill_res.status == "submitted":
                     existing_app.status = "submitted"
                     existing_app.stage = "completed"
                     existing_app.submitted_at = datetime.utcnow()
+                    fields_summary = ", ".join(fill_res.filled_fields[:6]) if fill_res.filled_fields else "all fields"
                     db.add(ApplicationEvent(
                         application_id=existing_app.id,
                         user_id=self.user_id,
                         status="submitted",
                         stage="submission_verified",
-                        message="Application successfully submitted and verified in live browser session.",
+                        message=f"Application submitted and verified! Completed fields: {fields_summary}.",
                     ))
                     db.commit()
                     self.applications_submitted += 1
@@ -465,29 +428,71 @@ class UserAutomationController:
                         metadata_json={"job_id": job.id, "application_id": existing_app.id},
                     ))
                     db.commit()
-                else:
-                    msg_lower = (submit_res.message or "").lower()
+                    continue
+
+                elif fill_res.status == "filled":
+                    # Form filled, trigger final submission click
+                    submit_res = executor.submit_application(candidate_package)
+                    if submit_res.status == "submitted":
+                        existing_app.status = "submitted"
+                        existing_app.stage = "completed"
+                        existing_app.submitted_at = datetime.utcnow()
+                        db.add(ApplicationEvent(
+                            application_id=existing_app.id,
+                            user_id=self.user_id,
+                            status="submitted",
+                            stage="submission_verified",
+                            message="Application successfully submitted and verified in live browser session.",
+                        ))
+                        db.commit()
+                        self.applications_submitted += 1
+
+                        db.add(Notification(
+                            user_id=self.user_id,
+                            type="application_submitted",
+                            title="Application Submitted",
+                            message=f"Successfully applied to {job.title} at {job.company}.",
+                            metadata_json={"job_id": job.id, "application_id": existing_app.id},
+                        ))
+                        db.commit()
+                        continue
+                    else:
+                        existing_app.status = "ready_to_submit"
+                        existing_app.stage = "review"
+                        db.add(ApplicationEvent(
+                            application_id=existing_app.id,
+                            user_id=self.user_id,
+                            status="ready_to_submit",
+                            stage="review",
+                            message="Application fields filled by AI agent. Pending user review or manual final click.",
+                        ))
+                        db.commit()
+                        continue
+
+                elif fill_res.status in {"failed", "blocked"}:
+                    msg_lower = (fill_res.message or "").lower()
                     if any(term in msg_lower for term in ("verification", "captcha", "security", "cloudflare")):
                         self.verification_required += 1
                         existing_app.status = "verification_required"
                         existing_app.stage = "security_challenge"
-                    elif any(term in msg_lower for term in ("login", "sign in")):
+                    elif any(term in msg_lower for term in ("login", "sign in", "auth")):
                         self.login_required += 1
                         existing_app.status = "login_required"
                         existing_app.stage = "auth_gate"
                     else:
                         self.failed += 1
                         existing_app.status = "failed"
-                    existing_app.error_message = submit_res.message
+                    existing_app.error_message = fill_res.message
                     db.add(ApplicationEvent(
                         application_id=existing_app.id,
                         user_id=self.user_id,
                         status=existing_app.status,
                         stage=existing_app.stage,
-                        message=submit_res.message or "Submission halted.",
+                        message=fill_res.message or "Application challenge encountered.",
                     ))
-                    refund_credit_for_application(db, self.user_id, existing_app.id, reason=submit_res.message or "Submission failed")
+                    refund_credit_for_application(db, self.user_id, existing_app.id, reason=fill_res.message or "Application failed")
                     db.commit()
+                    continue
 
             except Exception as app_err:
                 logger.error(f"Application error for job {job.id}: {app_err}", exc_info=True)

@@ -28,13 +28,6 @@ class IndeedAdapter(BrowserSiteAdapter):
     def capabilities(self) -> BrowserSiteCapabilities:
         return BrowserSiteCapabilities(
             site=BrowserSite.INDEED,
-            supported_fields=[
-                "name",
-                "first_name",
-                "last_name",
-                "email",
-                "cover_letter",
-            ],
         )
 
     def can_handle(self, url: str) -> bool:

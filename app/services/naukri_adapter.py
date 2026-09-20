@@ -28,13 +28,6 @@ class NaukriAdapter(BrowserSiteAdapter):
     def capabilities(self) -> BrowserSiteCapabilities:
         return BrowserSiteCapabilities(
             site=BrowserSite.NAUKRI,
-            supported_fields=[
-                "name",
-                "first_name",
-                "last_name",
-                "email",
-                "cover_letter",
-            ],
         )
 
     def can_handle(self, url: str) -> bool:
