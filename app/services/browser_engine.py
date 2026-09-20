@@ -379,7 +379,8 @@ class BrowserEngine:
             [
                 item
                 for item in page_info["inputs"]
-                if item.get("type", "").lower() not in {
+                if item.get("visible", False)
+                and item.get("type", "").lower() not in {
                     "file",
                     "hidden",
                     "submit",
@@ -388,7 +389,11 @@ class BrowserEngine:
                     "radio",
                 }
             ]
-            + page_info["textareas"]
+            + [
+                item
+                for item in page_info["textareas"]
+                if item.get("visible", False)
+            ]
         )
 
         return build_application_fill_plan(
@@ -428,7 +433,12 @@ class BrowserEngine:
         value: str,
     ) -> None:
         locator = self._get_locator(field)
-        locator.fill(str(value))
+        try:
+            if not locator.is_visible():
+                return
+            locator.fill(str(value), timeout=3000)
+        except Exception:
+            pass
 
     def select_field(
         self,
@@ -1132,7 +1142,7 @@ class BrowserEngine:
             )
 
         try:
-            submit_button.click()
+            submit_button.click(timeout=5000)
 
             # Give the portal a short opportunity to update.
             self.page.wait_for_load_state(

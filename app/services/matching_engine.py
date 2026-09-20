@@ -61,16 +61,21 @@ def match_job_for_user(
     )
 
     # 2. Check hard constraints
+    # 2. Check hard constraints
     # Experience check
     experience_match = True
-    if job.experience_years is not None and preferences.max_experience_years is not None:
+    if (
+        job.experience_years is not None
+        and preferences.max_experience_years is not None
+        and preferences.max_experience_years > 0
+    ):
         if job.experience_years > preferences.max_experience_years:
             experience_match = False
 
     # Salary check
     salary_match = True
     job_lpa = parse_salary_lpa(job.salary)
-    if job_lpa is not None and preferences.min_salary_lpa is not None:
+    if job_lpa is not None and preferences.min_salary_lpa is not None and preferences.min_salary_lpa > 0:
         if job_lpa < preferences.min_salary_lpa:
             salary_match = False
 
@@ -78,32 +83,53 @@ def match_job_for_user(
     location_match = True
     job_loc = (job.location or "").lower()
     preferred_locs = [l.lower() for l in (preferences.preferred_locations or [])]
-    if preferred_locs and job_loc:
-        matches_loc = any(loc in job_loc for loc in preferred_locs)
+    if getattr(preferences, "relocation", False):
+        location_match = True
+    elif preferred_locs and job_loc:
+        alias_map = {
+            "bangalore": "bengaluru",
+            "bengaluru": "bangalore",
+            "gurgaon": "gurugram",
+            "gurugram": "gurgaon",
+            "bombay": "mumbai",
+            "mumbai": "bombay",
+        }
+        matches_loc = any(
+            (loc in job_loc) or (alias_map.get(loc, "") in job_loc)
+            for loc in preferred_locs
+        )
         is_remote = "remote" in job_loc or preferences.remote_friendly
         location_match = matches_loc or is_remote
 
     # 3. Analyze skills & technical fit
     job_text = f"{job.title} {job.description}".lower()
+    title_lower = job.title.lower()
     matched_skills = []
     missing_skills = []
 
     for skill in candidate_skills:
-        if skill.lower() in job_text:
+        s_lower = skill.lower()
+        if s_lower in job_text or s_lower in title_lower:
+            matched_skills.append(skill)
+        elif ("ai" in title_lower or "gen ai" in title_lower) and s_lower in {
+            "python", "machine learning", "deep learning", "generative ai",
+            "large language models (llms)", "rag", "ai agents", "fastapi"
+        }:
             matched_skills.append(skill)
 
     # Check preferred roles
     role_matched = False
     preferred_roles = preferences.preferred_roles or []
     for r in preferred_roles:
-        if r.lower() in job.title.lower() or job.title.lower() in r.lower():
+        r_lower = r.lower()
+        if r_lower in title_lower or title_lower in r_lower or any(token in title_lower for token in r_lower.split()):
             role_matched = True
             break
 
     # 4. Determine score
     # Skill overlap component (up to 50 pts)
     total_skills = len(candidate_skills) or 1
-    skill_pct = min(1.0, len(matched_skills) / max(3, min(8, total_skills)))
+    skill_pct = min(1.0, len(matched_skills) / max(3, min(6, total_skills)))
     skill_score = int(skill_pct * 50)
 
     # Role relevance component (up to 30 pts)

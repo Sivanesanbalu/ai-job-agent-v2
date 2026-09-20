@@ -111,53 +111,45 @@ class UserAutomationController:
         roles = preferences.preferred_roles or ["Software Engineer", "AI Engineer"]
         locations = preferences.preferred_locations or ["India"]
 
-        # Check existing jobs or create candidates
-        candidate_jobs = db.query(JobListing).limit(20).all()
-        if not candidate_jobs:
-            # Seed demo/sample real portal jobs for discovery
-            sample_jobs = [
-                JobListing(
-                    source="linkedin",
-                    external_id="ln_101",
-                    url="https://www.linkedin.com/jobs/view/ai-engineer-101",
-                    title="AI Engineer",
-                    company="DeepTech Innovations",
-                    location="Bangalore, India",
-                    description="Looking for an AI Engineer experienced in Python, FastAPI, and LLM applications.",
-                    experience_years=1.0,
-                    salary="₹8-12 LPA",
-                    raw_data={},
-                ),
-                JobListing(
-                    source="naukri",
-                    external_id="nk_202",
-                    url="https://www.naukri.com/job-listings-genai-developer-202",
-                    title="Generative AI Developer",
-                    company="Cognitive Systems",
-                    location="Chennai, India",
-                    description="Requires Python, LangChain, RAG architectures, and REST APIs.",
-                    experience_years=0.5,
-                    salary="₹6-10 LPA",
-                    raw_data={},
-                ),
-                JobListing(
-                    source="indeed",
-                    external_id="ind_303",
-                    url="https://in.indeed.com/viewjob?jk=python-backend-303",
-                    title="Python Backend Engineer",
-                    company="CloudScale Solutions",
-                    location="Remote, India",
-                    description="Building high-throughput microservices using Python, FastAPI, PostgreSQL, Docker.",
-                    experience_years=2.0,
-                    salary="₹9-14 LPA",
-                    raw_data={},
-                ),
-            ]
-            for sj in sample_jobs:
-                if not db.query(JobListing).filter(JobListing.url == sj.url).first():
-                    db.add(sj)
+        # Run real portal discovery for the user's preferred roles and locations
+        try:
+            self.current_action = f"Searching live portals for {', '.join(roles[:2])}..."
+            from app.services.portal_job_discovery import discover_real_jobs_for_criteria
+            discovered_results = discover_real_jobs_for_criteria(
+                roles=roles,
+                locations=locations,
+                limit=25,
+                headless=True,
+            )
+            for res in discovered_results:
+                existing = db.query(JobListing).filter(JobListing.url == res.url).first()
+                if not existing:
+                    new_job = JobListing(
+                        source=res.source,
+                        external_id=res.url.split("/")[-1][:64],
+                        url=res.url,
+                        title=res.title,
+                        company=res.company,
+                        location=res.location,
+                        description=res.snippet or f"Live {res.title} opportunity at {res.company}.",
+                        raw_data={"discovered_source": res.source},
+                    )
+                    db.add(new_job)
             db.commit()
-            candidate_jobs = db.query(JobListing).limit(20).all()
+        except Exception as disc_err:
+            logger.warning(f"Live portal discovery notice: {disc_err}")
+
+        # Fetch real candidate jobs for matching (excluding test fixtures)
+        candidate_jobs = (
+            db.query(JobListing)
+            .filter(
+                ~JobListing.url.ilike("%example.com%"),
+                ~JobListing.url.ilike("%127.0.0.1%"),
+            )
+            .order_by(JobListing.created_at.desc())
+            .limit(30)
+            .all()
+        )
 
         self.jobs_discovered = len(candidate_jobs)
 
@@ -322,22 +314,120 @@ class UserAutomationController:
                 "requires_human_review": preferences.require_human_review,
             }
 
+            executor = None
             try:
-                # In autonomous execution:
+                # 1. Human review gate check
                 if preferences.require_human_review:
                     existing_app.status = "needs_human_review"
                     existing_app.stage = "review_gate"
+                    db.add(ApplicationEvent(
+                        application_id=existing_app.id,
+                        user_id=self.user_id,
+                        status="needs_human_review",
+                        stage="review_gate",
+                        message="Application drafted and held for human review gate per user settings.",
+                    ))
                     db.commit()
                     continue
 
-                # Simulate / run application step safely
-                # Update events
+                # 2. Launch real isolated BrowserExecutor
+                self.current_action = f"Opening {job.title} at {job.company} in browser..."
+                executor = BrowserExecutor(
+                    user_id=self.user_id,
+                    headless=True,
+                    resume_path=resume_file_path,
+                    application_answers=answers_dict,
+                )
+                self.current_executor = executor
+
+                open_res = executor.open_application(job.url)
+                if open_res.status in {"failed", "blocked"}:
+                    msg_lower = (open_res.message or "").lower()
+                    if any(term in msg_lower for term in ("verification", "captcha", "security", "cloudflare", "challenge")):
+                        self.verification_required += 1
+                        existing_app.status = "verification_required"
+                        existing_app.stage = "security_challenge"
+                    elif any(term in msg_lower for term in ("login", "sign in", "auth")):
+                        self.login_required += 1
+                        existing_app.status = "login_required"
+                        existing_app.stage = "auth_gate"
+                    else:
+                        self.failed += 1
+                        existing_app.status = "failed"
+                    existing_app.error_message = open_res.message
+                    db.add(ApplicationEvent(
+                        application_id=existing_app.id,
+                        user_id=self.user_id,
+                        status=existing_app.status,
+                        stage=existing_app.stage,
+                        message=open_res.message or "Could not open application page.",
+                    ))
+                    refund_credit_for_application(db, self.user_id, existing_app.id, reason=open_res.message or "Open failed")
+                    db.commit()
+                    continue
+
+                db.add(ApplicationEvent(
+                    application_id=existing_app.id,
+                    user_id=self.user_id,
+                    status="opened",
+                    stage="navigation",
+                    message=f"Application page opened: {open_res.message}",
+                ))
+                db.commit()
+
+                # 3. Fill Form
+                self.current_action = f"Filling application fields for {job.company}..."
+                fill_res = executor.fill_application(candidate_package)
+
+                # Check for login inputs or filling challenges
+                req_inputs = " ".join(fill_res.required_fields_needing_input or []).lower()
+                if any(k in req_inputs for k in ("password", "session_key", "session_password", "sign in", "login")):
+                    self.login_required += 1
+                    existing_app.status = "login_required"
+                    existing_app.stage = "auth_gate"
+                    existing_app.error_message = "Portal requires user login credentials to proceed."
+                    db.add(ApplicationEvent(
+                        application_id=existing_app.id,
+                        user_id=self.user_id,
+                        status="login_required",
+                        stage="auth_gate",
+                        message="Login wall detected: credentials required for this portal.",
+                    ))
+                    refund_credit_for_application(db, self.user_id, existing_app.id, reason="Login required")
+                    db.commit()
+                    continue
+
+                if fill_res.status in {"failed", "blocked"}:
+                    msg_lower = (fill_res.message or "").lower()
+                    if any(term in msg_lower for term in ("verification", "captcha", "security", "cloudflare")):
+                        self.verification_required += 1
+                        existing_app.status = "verification_required"
+                        existing_app.stage = "security_challenge"
+                    elif any(term in msg_lower for term in ("login", "sign in")):
+                        self.login_required += 1
+                        existing_app.status = "login_required"
+                        existing_app.stage = "auth_gate"
+                    else:
+                        self.failed += 1
+                        existing_app.status = "failed"
+                    existing_app.error_message = fill_res.message
+                    db.add(ApplicationEvent(
+                        application_id=existing_app.id,
+                        user_id=self.user_id,
+                        status=existing_app.status,
+                        stage=existing_app.stage,
+                        message=fill_res.message or "Form filling challenge encountered.",
+                    ))
+                    refund_credit_for_application(db, self.user_id, existing_app.id, reason=fill_res.message or "Fill failed")
+                    db.commit()
+                    continue
+
                 db.add(ApplicationEvent(
                     application_id=existing_app.id,
                     user_id=self.user_id,
                     status="form_filling",
                     stage="filling",
-                    message="Form detected, auto-filling candidate details and answers.",
+                    message=fill_res.message or "Candidate details, pitch, and questions filled.",
                 ))
                 if resume_file_path:
                     db.add(ApplicationEvent(
@@ -345,42 +435,81 @@ class UserAutomationController:
                         user_id=self.user_id,
                         status="resume_uploaded",
                         stage="upload",
-                        message=f"Uploaded resume: {active_resume.filename if active_resume else 'resume.pdf'}",
+                        message=f"Uploaded candidate resume: {active_resume.filename if active_resume else 'resume.pdf'}",
                     ))
-
-                # Mark submitted
-                existing_app.status = "submitted"
-                existing_app.stage = "completed"
-                existing_app.submitted_at = datetime.utcnow()
-                db.add(ApplicationEvent(
-                    application_id=existing_app.id,
-                    user_id=self.user_id,
-                    status="submitted",
-                    stage="submission_verified",
-                    message="Application successfully submitted and verified.",
-                ))
                 db.commit()
 
-                self.applications_submitted += 1
+                # 4. Submit application
+                self.current_action = f"Submitting application to {job.company}..."
+                submit_res = executor.submit_application(candidate_package)
 
-                # Send notification
-                db.add(Notification(
-                    user_id=self.user_id,
-                    type="application_submitted",
-                    title="Application Submitted",
-                    message=f"Successfully applied to {job.title} at {job.company}.",
-                    metadata_json={"job_id": job.id, "application_id": existing_app.id},
-                ))
-                db.commit()
+                if submit_res.status == "submitted":
+                    existing_app.status = "submitted"
+                    existing_app.stage = "completed"
+                    existing_app.submitted_at = datetime.utcnow()
+                    db.add(ApplicationEvent(
+                        application_id=existing_app.id,
+                        user_id=self.user_id,
+                        status="submitted",
+                        stage="submission_verified",
+                        message="Application successfully submitted and verified in live browser session.",
+                    ))
+                    db.commit()
+                    self.applications_submitted += 1
+
+                    db.add(Notification(
+                        user_id=self.user_id,
+                        type="application_submitted",
+                        title="Application Submitted",
+                        message=f"Successfully applied to {job.title} at {job.company}.",
+                        metadata_json={"job_id": job.id, "application_id": existing_app.id},
+                    ))
+                    db.commit()
+                else:
+                    msg_lower = (submit_res.message or "").lower()
+                    if any(term in msg_lower for term in ("verification", "captcha", "security", "cloudflare")):
+                        self.verification_required += 1
+                        existing_app.status = "verification_required"
+                        existing_app.stage = "security_challenge"
+                    elif any(term in msg_lower for term in ("login", "sign in")):
+                        self.login_required += 1
+                        existing_app.status = "login_required"
+                        existing_app.stage = "auth_gate"
+                    else:
+                        self.failed += 1
+                        existing_app.status = "failed"
+                    existing_app.error_message = submit_res.message
+                    db.add(ApplicationEvent(
+                        application_id=existing_app.id,
+                        user_id=self.user_id,
+                        status=existing_app.status,
+                        stage=existing_app.stage,
+                        message=submit_res.message or "Submission halted.",
+                    ))
+                    refund_credit_for_application(db, self.user_id, existing_app.id, reason=submit_res.message or "Submission failed")
+                    db.commit()
 
             except Exception as app_err:
-                logger.error(f"Application error for job {job.id}: {app_err}")
+                logger.error(f"Application error for job {job.id}: {app_err}", exc_info=True)
                 self.failed += 1
                 existing_app.status = "failed"
                 existing_app.error_message = str(app_err)
-                # Refund credit on failure
+                db.add(ApplicationEvent(
+                    application_id=existing_app.id,
+                    user_id=self.user_id,
+                    status="failed",
+                    stage="execution_error",
+                    message=f"Execution error: {app_err}",
+                ))
                 refund_credit_for_application(db, self.user_id, existing_app.id, reason=str(app_err))
                 db.commit()
+            finally:
+                if executor:
+                    try:
+                        executor.close()
+                    except Exception:
+                        pass
+                self.current_executor = None
 
             time.sleep(0.5)
 

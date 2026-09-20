@@ -151,16 +151,51 @@ def search_jobs(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Triggers discovery for the user's criteria
     pref = current_user.preferences
-    keyword = data.keyword or (pref.preferred_roles[0] if pref and pref.preferred_roles else "Engineer")
-    location = data.location or (pref.preferred_locations[0] if pref and pref.preferred_locations else "Bangalore")
+    keyword = data.keyword or (pref.preferred_roles[0] if pref and pref.preferred_roles else "AI Engineer")
+    location = data.location or (pref.preferred_locations[0] if pref and pref.preferred_locations else "India")
 
-    # In production/dev mode, verify or discover real jobs
-    found_jobs = db.query(JobListing).filter(JobListing.title.ilike(f"%{keyword}%")).limit(data.limit).all()
+    # Discover real jobs from live portals
+    new_jobs_count = 0
+    try:
+        from app.services.portal_job_discovery import discover_real_jobs_for_criteria
+        results = discover_real_jobs_for_criteria(
+            roles=[keyword],
+            locations=[location],
+            limit=data.limit or 20,
+            headless=True,
+        )
+        for r in results:
+            if not db.query(JobListing).filter(JobListing.url == r.url).first():
+                db.add(JobListing(
+                    source=r.source,
+                    external_id=r.url.split("/")[-1][:64],
+                    url=r.url,
+                    title=r.title,
+                    company=r.company,
+                    location=r.location,
+                    description=r.snippet or f"Live {r.title} opportunity at {r.company}.",
+                    raw_data={"discovered_source": r.source},
+                ))
+                new_jobs_count += 1
+        db.commit()
+    except Exception:
+        pass
+
+    found_jobs = (
+        db.query(JobListing)
+        .filter(
+            ~JobListing.url.ilike("%example.com%"),
+            ~JobListing.url.ilike("%127.0.0.1%"),
+            (JobListing.title.ilike(f"%{keyword}%")) | (JobListing.description.ilike(f"%{keyword}%")),
+        )
+        .order_by(JobListing.created_at.desc())
+        .limit(data.limit)
+        .all()
+    )
     return {
         "status": "ok",
-        "message": f"Discovery completed for '{keyword}' in '{location}'",
+        "message": f"Discovery completed for '{keyword}' in '{location}'. Found {len(found_jobs)} listings ({new_jobs_count} newly added).",
         "count": len(found_jobs),
     }
 

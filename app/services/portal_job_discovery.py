@@ -510,36 +510,48 @@ class PortalJobDiscovery:
 
                     card = (
                         link.locator(
-                            "xpath=ancestor::*"
+                            "xpath=ancestor::div[contains(@class, 'base-card')] | ancestor::li"
                         )
                         .first
                     )
 
+                    card_text = ""
                     try:
-                        card_text = (
-                            card.inner_text(
-                                timeout=1000
-                            )
-                        )
+                        card_text = card.inner_text(timeout=1000)
                     except Exception:
-                        card_text = ""
+                        pass
 
-                    company = self._extract_company(
-                        card_text
-                    )
+                    company = ""
+                    try:
+                        comp_elem = card.locator(".base-search-card__subtitle, .job-search-card__subtitle, a[data-tracking-control-name*='company']").first
+                        if comp_elem.count() > 0:
+                            company = comp_elem.inner_text().strip()
+                    except Exception:
+                        pass
 
-                    job_location = (
-                        self._extract_location(
-                            card_text,
-                            location,
-                        )
-                    )
+                    if not company:
+                        m = re.search(r'-at-([a-z0-9-]+)-\d+$', clean)
+                        if m:
+                            company = m.group(1).replace('-', ' ').title()
+                        else:
+                            company = self._extract_company(card_text)
+
+                    job_location = ""
+                    try:
+                        loc_elem = card.locator(".job-search-card__location, .base-search-card__metadata span").first
+                        if loc_elem.count() > 0:
+                            job_location = loc_elem.inner_text().strip()
+                    except Exception:
+                        pass
+
+                    if not job_location:
+                        job_location = self._extract_location(card_text, location)
 
                     results.append(
                         PortalSearchResult(
                             title=title,
-                            company=company,
-                            location=job_location,
+                            company=company or "Hiring Company",
+                            location=job_location or location,
                             url=clean,
                             source="linkedin",
                             snippet=card_text[:1000],
@@ -799,41 +811,50 @@ class PortalJobDiscovery:
                     try:
                         card = (
                             link.locator(
-                                "xpath=ancestor::*"
+                                "xpath=ancestor::div[contains(@class, 'cardOutline')] | ancestor::div[contains(@class, 'job_seen_beacon')] | ancestor::li"
                             ).first
                         )
 
-                        card_text = (
-                            card.inner_text(
-                                timeout=1000
+                        card_text = ""
+                        try:
+                            card_text = card.inner_text(timeout=1000)
+                        except Exception:
+                            pass
+
+                        company = ""
+                        try:
+                            comp_elem = card.locator("span[data-testid='company-name'], .companyName, span.company").first
+                            if comp_elem.count() > 0:
+                                company = comp_elem.inner_text().strip()
+                        except Exception:
+                            pass
+
+                        if not company:
+                            company = self._extract_company(card_text)
+
+                        job_location = ""
+                        try:
+                            loc_elem = card.locator("div[data-testid='text-location'], .companyLocation").first
+                            if loc_elem.count() > 0:
+                                job_location = loc_elem.inner_text().strip()
+                        except Exception:
+                            pass
+
+                        if not job_location:
+                            job_location = self._extract_location(card_text, location)
+
+                        results.append(
+                            PortalSearchResult(
+                                title=title,
+                                company=company or "Hiring Company",
+                                location=job_location or location,
+                                url=clean,
+                                source="indeed",
+                                snippet=card_text[:1000],
                             )
                         )
                     except Exception:
-                        card_text = ""
-
-                    company = (
-                        self._extract_company(
-                            card_text
-                        )
-                    )
-
-                    job_location = (
-                        self._extract_location(
-                            card_text,
-                            location,
-                        )
-                    )
-
-                    results.append(
-                        PortalSearchResult(
-                            title=title,
-                            company=company,
-                            location=job_location,
-                            url=clean,
-                            source="indeed",
-                            snippet=card_text[:1000],
-                        )
-                    )
+                        continue
 
                 except Exception:
                     continue
@@ -1088,3 +1109,51 @@ def portal_results_to_jobs(
         )
 
     return jobs
+
+
+def discover_real_jobs_for_criteria(
+    roles: list[str],
+    locations: list[str],
+    limit: int = 30,
+    headless: bool = True,
+) -> list[PortalSearchResult]:
+    """Search live portals (LinkedIn, Indeed) for candidate roles & locations."""
+    engine = PortalJobDiscovery(headless=headless)
+    discovered: dict[str, PortalSearchResult] = {}
+
+    target_roles = [r for r in roles if r.strip()][:3] or ["Software Engineer"]
+    target_locations = [l for l in locations if l.strip()][:2] or ["India"]
+
+    try:
+        engine.start()
+        for role in target_roles:
+            if len(discovered) >= limit:
+                break
+            for loc in target_locations:
+                if len(discovered) >= limit:
+                    break
+                # Try LinkedIn
+                try:
+                    ln_res = engine.search_portal("linkedin", role, loc)
+                    for r in ln_res:
+                        if r.url not in discovered:
+                            discovered[r.url] = r
+                except Exception as e:
+                    print(f"LinkedIn discovery notice for {role}: {e}")
+
+                if len(discovered) >= limit:
+                    break
+
+                # Try Indeed
+                try:
+                    ind_res = engine.search_portal("indeed", role, loc)
+                    for r in ind_res:
+                        if r.url not in discovered:
+                            discovered[r.url] = r
+                except Exception as e:
+                    print(f"Indeed discovery notice for {role}: {e}")
+
+        return list(discovered.values())[:limit]
+    finally:
+        engine.close()
+

@@ -6,7 +6,7 @@ from app.services.source_registry import SourceRegistry
 
 
 def create_source_registry(
-    include_demo: bool = True,
+    include_demo: bool = False,
     http_sources: list[dict] | None = None,
 ) -> SourceRegistry:
     """
