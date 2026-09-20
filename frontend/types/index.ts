@@ -179,6 +179,8 @@ export interface Plan {
   included_applications: number;
   features: string[];
   is_active: boolean;
+  billing_type?: string;
+  tag?: string;
 }
 
 export interface Notification {

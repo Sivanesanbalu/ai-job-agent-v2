@@ -83,13 +83,13 @@ export default function CreditsPage() {
 
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Free Bonus Granted</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Free Allowance</span>
             <Sparkles className="h-5 w-5 text-amber-500" />
           </div>
           <div className="text-2xl font-bold text-slate-900 tracking-tight">
-            {balance?.total_included ?? 100}
+            {balance?.total_included ?? 5}
           </div>
-          <p className="text-xs text-slate-400 mt-1">Initial signup grant</p>
+          <p className="text-xs text-slate-400 mt-1">5 credits renewed monthly</p>
         </div>
 
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">

@@ -28,12 +28,12 @@ def test_full_user_lifecycle_via_api(client: TestClient):
     token = data["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    # 2. Verify 100 Free Credits Granted Automatically
+    # 2. Verify 5 Free Credits Granted Automatically
     cred_res = client.get("/api/v1/credits", headers=headers)
     assert cred_res.status_code == 200
     cred_data = cred_res.json()
-    assert cred_data["balance"] == 100
-    assert cred_data["total_included"] == 100
+    assert cred_data["balance"] == 5
+    assert cred_data["total_included"] == 5
 
     # 3. Get and Update Profile
     prof_res = client.get("/api/v1/profile", headers=headers)
@@ -119,4 +119,4 @@ def test_full_user_lifecycle_via_api(client: TestClient):
     auto_status = client.get("/api/v1/automation/status", headers=headers)
     assert auto_status.status_code == 200
     assert "is_running" in auto_status.json()
-    assert auto_status.json()["credits_remaining"] == 100
+    assert auto_status.json()["credits_remaining"] == 5

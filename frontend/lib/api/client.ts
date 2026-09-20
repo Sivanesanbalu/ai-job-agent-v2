@@ -239,6 +239,40 @@ class ApiClient {
 
   billing = {
     getPlans: () => this.request<Plan[]>("/billing/plans"),
+    createRazorpayOrder: (planSlug: string) =>
+      this.request<{
+        order_id: string;
+        amount: number;
+        amount_inr: number;
+        currency: string;
+        key_id: string;
+        plan_name: string;
+        plan_slug: string;
+        credits: number;
+        user_email: string;
+        user_name: string;
+        user_phone: string;
+      }>("/billing/create-order", {
+        method: "POST",
+        body: JSON.stringify({ plan_slug: planSlug }),
+      }),
+    verifyRazorpayPayment: (payload: {
+      razorpay_order_id: string;
+      razorpay_payment_id: string;
+      razorpay_signature: string;
+    }) =>
+      this.request<{
+        status: string;
+        message: string;
+        payment_id: number;
+        razorpay_order_id: string;
+        razorpay_payment_id: string;
+        credits_granted: number;
+        amount_inr: number;
+      }>("/billing/verify-payment", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
     checkout: (planSlug: string) =>
       this.request<any>("/billing/checkout", {
         method: "POST",

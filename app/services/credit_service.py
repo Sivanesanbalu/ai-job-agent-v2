@@ -1,45 +1,79 @@
-from __future__ import annotations
-
+import datetime
 import logging
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+from app.core.config import settings
 from app.db.models import CreditBalance, CreditTransaction, Application
 
 logger = logging.getLogger(__name__)
 
 
-def initialize_user_credits(db: Session, user_id: int, initial_credits: int = 100) -> CreditBalance:
-    existing = db.query(CreditBalance).filter(CreditBalance.user_id == user_id).first()
-    if existing:
-        return existing
+def ensure_user_credits(db: Session, user_id: int) -> CreditBalance:
+    """
+    Ensures user has an active CreditBalance.
+    Grants the free monthly credits (5 per month) if user is new or if 30 days have elapsed.
+    """
+    now = datetime.datetime.utcnow()
+    bal = db.query(CreditBalance).filter(CreditBalance.user_id == user_id).first()
+    monthly_credits = getattr(settings, "FREE_MONTHLY_CREDITS", 5)
 
-    credit_bal = CreditBalance(
-        user_id=user_id,
-        balance=initial_credits,
-        total_included=initial_credits,
-        total_purchased=0,
-        total_used=0,
-    )
-    db.add(credit_bal)
-    db.flush()
+    if not bal:
+        bal = CreditBalance(
+            user_id=user_id,
+            balance=monthly_credits,
+            total_included=monthly_credits,
+            total_purchased=0,
+            total_used=0,
+            last_monthly_grant_at=now,
+        )
+        db.add(bal)
+        db.flush()
 
-    tx = CreditTransaction(
-        user_id=user_id,
-        application_id=None,
-        type="grant",
-        amount=initial_credits,
-        balance_before=0,
-        balance_after=initial_credits,
-        description="Welcome bonus: 100 free job applications",
-    )
-    db.add(tx)
-    db.commit()
-    db.refresh(credit_bal)
-    return credit_bal
+        tx = CreditTransaction(
+            user_id=user_id,
+            application_id=None,
+            type="grant",
+            amount=monthly_credits,
+            balance_before=0,
+            balance_after=monthly_credits,
+            description=f"Free monthly allowance: {monthly_credits} application credits",
+        )
+        db.add(tx)
+        db.commit()
+        db.refresh(bal)
+        return bal
+
+    # Monthly renewal check (every 30 days)
+    last_grant = bal.last_monthly_grant_at
+    if last_grant is None or (now - last_grant).days >= 30:
+        before = bal.balance
+        after = before + monthly_credits
+        bal.balance = after
+        bal.total_included += monthly_credits
+        bal.last_monthly_grant_at = now
+
+        tx = CreditTransaction(
+            user_id=user_id,
+            application_id=None,
+            type="grant",
+            amount=monthly_credits,
+            balance_before=before,
+            balance_after=after,
+            description=f"Monthly free renewal: +{monthly_credits} application credits",
+        )
+        db.add(tx)
+        db.commit()
+        db.refresh(bal)
+
+    return bal
+
+
+def initialize_user_credits(db: Session, user_id: int, initial_credits: int = 5) -> CreditBalance:
+    return ensure_user_credits(db, user_id)
 
 
 def check_has_sufficient_credits(db: Session, user_id: int) -> bool:
-    bal = db.query(CreditBalance).filter(CreditBalance.user_id == user_id).first()
+    bal = ensure_user_credits(db, user_id)
     return bal is not None and bal.balance > 0
 
 

@@ -268,97 +268,180 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-6">
           <div className="text-center max-w-3xl mx-auto">
             <h2 className="text-xs font-bold uppercase tracking-wider text-indigo-600">
-              Transparent Credit Model
+              Free + Pay-As-You-Go Credits
             </h2>
             <p className="mt-2 text-3xl font-extrabold text-slate-900 sm:text-4xl">
-              Simple, Pay-As-You-Apply Pricing
+              Transparent, Zero-Commitment Pricing
             </p>
             <p className="mt-4 text-base text-slate-600">
-              Every user starts with 100 free applications. Top up anytime with transparent credit pricing.
+              Start with 5 free application credits every month. Top up whenever you need more applications with zero subscriptions or recurring locks.
             </p>
           </div>
 
-          <div className="mt-16 grid grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto gap-8">
-            {/* Free Starter */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-md transition">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Starter Tier
+          <div className="mt-16 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 max-w-6xl mx-auto gap-6">
+            {/* Free */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Free
+                </div>
+                <div className="mt-3 flex items-baseline gap-1">
+                  <span className="text-3xl font-extrabold text-slate-900">₹0</span>
+                  <span className="text-xs text-slate-500 uppercase">/ month</span>
+                </div>
+                <p className="mt-2 text-xs text-slate-600">
+                  5 free applications per month. Free forever.
+                </p>
+                <ul className="mt-5 space-y-2.5 text-xs text-slate-700">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    5 Applications / month
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    Autonomous Form Agent
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    Multi-Portal Discovery
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    Auto-refund on challenge
+                  </li>
+                </ul>
               </div>
-              <div className="mt-4 flex items-baseline gap-2">
-                <span className="text-4xl font-extrabold text-slate-900">₹0</span>
-                <span className="text-sm text-slate-500">Free forever</span>
-              </div>
-              <p className="mt-3 text-sm text-slate-600">
-                Everything you need to experience autonomous applications.
-              </p>
-
-              <ul className="mt-6 space-y-3 text-sm text-slate-700">
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  100 Included Applications
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  PDF / DOCX Resume Parsing
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  AI Matching Engine
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  Real-Time Tracking Dashboard
-                </li>
-              </ul>
-
               <Link
                 href="/register"
-                className="mt-8 block w-full rounded-xl border border-slate-200 bg-slate-50 py-3 text-center text-sm font-semibold text-slate-900 hover:bg-slate-100 transition"
+                className="mt-6 block w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 text-center text-xs font-semibold text-slate-900 hover:bg-slate-100 transition"
               >
-                Sign Up & Claim 100 Credits
+                Start Free
               </Link>
             </div>
 
-            {/* Pro Booster */}
-            <div className="relative rounded-2xl border-2 border-indigo-600 bg-white p-8 shadow-lg">
-              <div className="absolute -top-3 right-6 rounded-full bg-indigo-600 px-3 py-1 text-xs font-bold text-white uppercase tracking-wider">
-                Popular Booster
+            {/* Starter Pack */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-indigo-600">
+                  Starter Pack
+                </div>
+                <div className="mt-3 flex items-baseline gap-1">
+                  <span className="text-3xl font-extrabold text-slate-900">₹149</span>
+                  <span className="text-xs text-slate-400 uppercase">one-time</span>
+                </div>
+                <p className="mt-2 text-xs text-slate-600">
+                  10 application credits for targeted outreach.
+                </p>
+                <ul className="mt-5 space-y-2.5 text-xs text-slate-700">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-600 flex-shrink-0" />
+                    10 Application Credits
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-600 flex-shrink-0" />
+                    Never expire
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-600 flex-shrink-0" />
+                    Full LLM Form Answering
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-600 flex-shrink-0" />
+                    Auto-refund on errors
+                  </li>
+                </ul>
               </div>
-              <div className="text-xs font-semibold uppercase tracking-wider text-indigo-600">
-                Additional Applications
-              </div>
-              <div className="mt-4 flex items-baseline gap-2">
-                <span className="text-4xl font-extrabold text-slate-900">₹100</span>
-                <span className="text-sm text-slate-500">/ 100 applications</span>
-              </div>
-              <p className="mt-3 text-sm text-slate-600">
-                Just ₹1 per submitted application. Credits never expire.
-              </p>
-
-              <ul className="mt-6 space-y-3 text-sm text-slate-700">
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-indigo-600" />
-                  +100 Additional Auto Applications
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-indigo-600" />
-                  Priority Browser Execution Queue
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-indigo-600" />
-                  Multi-Resume Version Support
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-indigo-600" />
-                  Credits refunded on failed submissions
-                </li>
-              </ul>
-
               <Link
                 href="/register"
-                className="mt-8 block w-full rounded-xl bg-indigo-600 py-3 text-center text-sm font-semibold text-white shadow-md hover:bg-indigo-700 transition"
+                className="mt-6 block w-full rounded-xl bg-slate-900 py-2.5 text-center text-xs font-semibold text-white hover:bg-black transition"
               >
-                Get Started
+                Get 10 Credits
+              </Link>
+            </div>
+
+            {/* Job Seeker Pack */}
+            <div className="relative rounded-2xl border-2 border-indigo-600 bg-white p-6 shadow-lg shadow-indigo-100 flex flex-col justify-between ring-2 ring-indigo-50">
+              <div className="absolute -top-3 right-4 rounded-full bg-indigo-600 px-2.5 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
+                Most Popular
+              </div>
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-indigo-600">
+                  Job Seeker Pack
+                </div>
+                <div className="mt-3 flex items-baseline gap-1">
+                  <span className="text-3xl font-extrabold text-slate-900">₹299</span>
+                  <span className="text-xs text-slate-400 uppercase">one-time</span>
+                </div>
+                <p className="mt-2 text-xs text-slate-600">
+                  25 application credits for active job hunters.
+                </p>
+                <ul className="mt-5 space-y-2.5 text-xs text-slate-700">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-600 flex-shrink-0" />
+                    25 Application Credits
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-600 flex-shrink-0" />
+                    Priority browser runner
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-600 flex-shrink-0" />
+                    Cover Letter & Pitch Tuning
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-600 flex-shrink-0" />
+                    Auto-refund on errors
+                  </li>
+                </ul>
+              </div>
+              <Link
+                href="/register"
+                className="mt-6 block w-full rounded-xl bg-indigo-600 py-2.5 text-center text-xs font-semibold text-white hover:bg-indigo-700 shadow-sm transition"
+              >
+                Get 25 Credits
+              </Link>
+            </div>
+
+            {/* Power Pack */}
+            <div className="relative rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 text-white p-6 shadow-lg flex flex-col justify-between">
+              <div className="absolute -top-3 right-4 rounded-full bg-amber-400 px-2.5 py-0.5 text-[10px] font-extrabold text-slate-950 uppercase tracking-wider">
+                Best Value
+              </div>
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-amber-400">
+                  Power Pack
+                </div>
+                <div className="mt-3 flex items-baseline gap-1">
+                  <span className="text-3xl font-extrabold text-white">₹499</span>
+                  <span className="text-xs text-slate-400 uppercase">one-time</span>
+                </div>
+                <p className="mt-2 text-xs text-slate-400">
+                  50 application credits for high-volume campaigns.
+                </p>
+                <ul className="mt-5 space-y-2.5 text-xs text-slate-300">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                    50 Application Credits
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                    Lowest cost per application
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                    Ultra-fast parallel matching
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                    Instant Razorpay activation
+                  </li>
+                </ul>
+              </div>
+              <Link
+                href="/register"
+                className="mt-6 block w-full rounded-xl bg-amber-400 py-2.5 text-center text-xs font-bold text-slate-950 hover:bg-amber-300 transition"
+              >
+                Get 50 Credits
               </Link>
             </div>
           </div>
@@ -381,7 +464,17 @@ export default function LandingPage() {
                 Never. In accordance with strict security standards, whenever a
                 portal presents a CAPTCHA, OTP, or identity challenge, the
                 application is marked as <strong>VERIFICATION_REQUIRED</strong>.
-                The agent alerts you and continues processing other eligible jobs.
+                Your credit is refunded automatically and the agent continues processing other eligible jobs.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="text-base font-bold text-slate-900">
+                When are credits consumed?
+              </h3>
+              <p className="mt-2 text-sm text-slate-600">
+                Exactly 1 credit is consumed ONLY when an application is actually processed and submitted to an employer portal.
+                Job discovery, keyword matching, viewing postings, and account setup consume zero credits.
               </p>
             </div>
 
@@ -413,24 +506,27 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-12">
-        <div className="mx-auto max-w-7xl px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="mx-auto max-w-7xl px-6 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <Bot className="h-5 w-5 text-indigo-600" />
-            &copy; 2026 AI Job Agent SaaS. All rights reserved.
+            &copy; 2026 AI Job Agent SaaS. All rights reserved. Secured by Razorpay.
           </div>
-          <div className="flex gap-6 text-sm text-slate-500">
-            <Link href="/login" className="hover:text-slate-900">
+          <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600">
+            <Link href="/terms" className="hover:text-indigo-600 transition">
+              Terms & Conditions
+            </Link>
+            <Link href="/privacy" className="hover:text-indigo-600 transition">
+              Privacy Policy
+            </Link>
+            <Link href="/refund-policy" className="hover:text-indigo-600 transition">
+              Cancellation & Refund Policy
+            </Link>
+            <Link href="/contact" className="hover:text-indigo-600 transition">
+              Contact Us
+            </Link>
+            <Link href="/login" className="hover:text-indigo-600 transition">
               Sign In
             </Link>
-            <Link href="/register" className="hover:text-slate-900">
-              Register
-            </Link>
-            <a href="#privacy" className="hover:text-slate-900">
-              Privacy Policy
-            </a>
-            <a href="#terms" className="hover:text-slate-900">
-              Terms of Service
-            </a>
           </div>
         </div>
       </footer>

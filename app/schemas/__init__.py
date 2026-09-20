@@ -321,6 +321,8 @@ class PlanOut(BaseModel):
     included_applications: int
     features: List[str]
     is_active: bool
+    billing_type: Optional[str] = "one_time"
+    tag: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -328,6 +330,30 @@ class PlanOut(BaseModel):
 
 class CheckoutRequest(BaseModel):
     plan_slug: str
+
+
+class RazorpayOrderCreateRequest(BaseModel):
+    plan_slug: str
+
+
+class RazorpayOrderResponse(BaseModel):
+    order_id: str
+    amount: int
+    amount_inr: int
+    currency: str
+    key_id: str
+    plan_name: str
+    plan_slug: str
+    credits: int
+    user_email: str
+    user_name: str
+    user_phone: str
+
+
+class RazorpayVerifyRequest(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
 
 
 # ==========================================

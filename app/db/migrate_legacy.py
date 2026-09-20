@@ -12,39 +12,106 @@ logger = logging.getLogger(__name__)
 def migrate_legacy_data() -> None:
     session = SessionLocal()
     try:
-        # Seed default plans if not present
-        if not session.query(Plan).first():
-            free_plan = Plan(
-                name="Free Starter",
-                slug="free",
-                price_inr=0,
-                included_applications=100,
-                extra_application_cost_inr=1,
-                features=[
-                    "100 Included Applications",
-                    "LinkedIn, Indeed, Naukri Discovery",
-                    "AI Resume Matching",
-                    "Real-Time Automation Tracking",
+        # Seed or sync Free + Pay-as-you-go credit packs
+        desired_packs = [
+            {
+                "name": "Free",
+                "slug": "free",
+                "price_inr": 0,
+                "included_applications": 5,
+                "extra_application_cost_inr": 0,
+                "billing_type": "free",
+                "tag": "",
+                "features": [
+                    "5 Applications / month",
+                    "Real-Time LinkedIn & Portal Job Discovery",
+                    "AI Resume Matching & Scoring",
+                    "Autonomous Multi-Step Form Filling",
+                    "Candidate Privacy & Zero-Waste Credit Guarantee",
                 ],
-                is_active=True,
-            )
-            pro_plan = Plan(
-                name="Pro Booster",
-                slug="pro-booster",
-                price_inr=100,
-                included_applications=100,
-                extra_application_cost_inr=1,
-                features=[
-                    "Additional 100 Auto Applications",
-                    "Priority Browser Queue",
-                    "Advanced Multi-step Form Auto-filling",
-                    "Dedicated Support",
+            },
+            {
+                "name": "Starter Pack",
+                "slug": "starter_pack",
+                "price_inr": 149,
+                "included_applications": 10,
+                "extra_application_cost_inr": 15,
+                "billing_type": "pay_as_you_go",
+                "tag": "",
+                "features": [
+                    "10 Guaranteed Application Credits",
+                    "Pay-as-you-go (No recurring subscription)",
+                    "Priority Browser Queue & Auto-fill",
+                    "AI Custom Screening Question Responses",
+                    "Credits never expire",
                 ],
-                is_active=True,
-            )
-            session.add_all([free_plan, pro_plan])
-            session.commit()
-            logger.info("Default plans seeded successfully.")
+            },
+            {
+                "name": "Job Seeker Pack",
+                "slug": "job_seeker_pack",
+                "price_inr": 299,
+                "included_applications": 25,
+                "extra_application_cost_inr": 12,
+                "billing_type": "pay_as_you_go",
+                "tag": "Most Popular",
+                "features": [
+                    "25 Guaranteed Application Credits",
+                    "Pay-as-you-go (No recurring subscription)",
+                    "High-Throughput Multi-Step Automation",
+                    "Automated Pitch & Cover Letter Synthesis",
+                    "Instant Credit Refund on Security Challenges",
+                    "Priority Customer Support",
+                ],
+            },
+            {
+                "name": "Power Pack",
+                "slug": "power_pack",
+                "price_inr": 499,
+                "included_applications": 50,
+                "extra_application_cost_inr": 10,
+                "billing_type": "pay_as_you_go",
+                "tag": "Best Value",
+                "features": [
+                    "50 Guaranteed Application Credits",
+                    "Pay-as-you-go (No recurring subscription)",
+                    "Fastest Execution Queue",
+                    "Multi-Portal Live Submissions",
+                    "Dedicated AI Agent Pipeline",
+                    "Credits never expire",
+                ],
+            },
+        ]
+
+        for p_data in desired_packs:
+            existing = session.query(Plan).filter(Plan.slug == p_data["slug"]).first()
+            if not existing:
+                plan = Plan(
+                    name=p_data["name"],
+                    slug=p_data["slug"],
+                    price_inr=p_data["price_inr"],
+                    included_applications=p_data["included_applications"],
+                    extra_application_cost_inr=p_data["extra_application_cost_inr"],
+                    features=p_data["features"],
+                    billing_type=p_data["billing_type"],
+                    tag=p_data["tag"],
+                    is_active=True,
+                )
+                session.add(plan)
+            else:
+                existing.name = p_data["name"]
+                existing.price_inr = p_data["price_inr"]
+                existing.included_applications = p_data["included_applications"]
+                existing.features = p_data["features"]
+                existing.billing_type = p_data["billing_type"]
+                existing.tag = p_data["tag"]
+                existing.is_active = True
+
+        # Deactivate old demo plans if present
+        session.query(Plan).filter(Plan.slug.notin_(["free", "starter_pack", "job_seeker_pack", "power_pack"])).update(
+            {"is_active": False}, synchronize_session=False
+        )
+        session.commit()
+        logger.info("Monetization credit packs synced successfully.")
 
         # Migrate jobs from jobs.db if it exists
         legacy_db = Path("jobs.db")

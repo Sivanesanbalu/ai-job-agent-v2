@@ -6,37 +6,54 @@ from app.db.models import User, CreditBalance, CreditTransaction, Application, J
 from app.core.security import get_password_hash
 from app.services.credit_service import (
     initialize_user_credits,
+    ensure_user_credits,
     check_has_sufficient_credits,
     deduct_credit_for_application,
     refund_credit_for_application,
     purchase_credits,
 )
 
-def test_initialize_user_credits(db: Session):
-    user = User(email=f"credits_user_1_{time.time_ns()}@test.com", hashed_password=get_password_hash("pass"), is_active=True)
+
+def test_initialize_and_ensure_user_credits(db: Session):
+    user = User(
+        email=f"credits_user_1_{time.time_ns()}@test.com",
+        hashed_password=get_password_hash("pass"),
+        is_active=True,
+    )
     db.add(user)
     db.commit()
 
-    bal = initialize_user_credits(db, user.id, 100)
-    assert bal.balance == 100
-    assert bal.total_included == 100
+    # Free users receive 5 monthly credits
+    bal = ensure_user_credits(db, user.id)
+    assert bal.balance == 5
+    assert bal.total_included == 5
 
-    # Test idempotency - calling again does not grant another 100
-    bal_second = initialize_user_credits(db, user.id, 100)
-    assert bal_second.balance == 100
+    # Test idempotency - calling again within 30 days does not grant another 5
+    bal_second = ensure_user_credits(db, user.id)
+    assert bal_second.balance == 5
 
     tx = db.query(CreditTransaction).filter(CreditTransaction.user_id == user.id).first()
     assert tx is not None
     assert tx.type == "grant"
-    assert tx.amount == 100
+    assert tx.amount == 5
+
 
 def test_deduct_and_refund_flow(db: Session):
-    user = User(email=f"credits_user_2_{time.time_ns()}@test.com", hashed_password=get_password_hash("pass"), is_active=True)
+    user = User(
+        email=f"credits_user_2_{time.time_ns()}@test.com",
+        hashed_password=get_password_hash("pass"),
+        is_active=True,
+    )
     db.add(user)
     db.commit()
-    initialize_user_credits(db, user.id, 5)
+    ensure_user_credits(db, user.id)
 
-    job = JobListing(title="Test Job", company="Test Corp", url=f"https://example.com/job2_{time.time_ns()}", source="test")
+    job = JobListing(
+        title="Test Job",
+        company="Test Corp",
+        url=f"https://example.com/job2_{time.time_ns()}",
+        source="test",
+    )
     db.add(job)
     db.commit()
 
@@ -65,13 +82,32 @@ def test_deduct_and_refund_flow(db: Session):
     refund_tx_dup = refund_credit_for_application(db, user.id, app_rec.id, reason="Portal error")
     assert refund_tx_dup.id == refund_tx.id
 
+
 def test_insufficient_credits_raises_402(db: Session):
-    user = User(email=f"credits_user_empty_{time.time_ns()}@test.com", hashed_password=get_password_hash("pass"), is_active=True)
+    user = User(
+        email=f"credits_user_empty_{time.time_ns()}@test.com",
+        hashed_password=get_password_hash("pass"),
+        is_active=True,
+    )
     db.add(user)
     db.commit()
-    initialize_user_credits(db, user.id, 0)
 
-    job = JobListing(title="Job 3", company="Co", url=f"https://example.com/job3_{time.time_ns()}", source="test")
+    bal = CreditBalance(
+        user_id=user.id,
+        balance=0,
+        total_included=0,
+        total_purchased=0,
+        total_used=0,
+    )
+    db.add(bal)
+    db.commit()
+
+    job = JobListing(
+        title="Job 3",
+        company="Co",
+        url=f"https://example.com/job3_{time.time_ns()}",
+        source="test",
+    )
     db.add(job)
     db.commit()
 
@@ -83,13 +119,19 @@ def test_insufficient_credits_raises_402(db: Session):
         deduct_credit_for_application(db, user.id, app_rec.id)
     assert exc_info.value.status_code == 402
 
+
 def test_grant_purchased_credits(db: Session):
-    user = User(email=f"credits_user_purchase_{time.time_ns()}@test.com", hashed_password=get_password_hash("pass"), is_active=True)
+    user = User(
+        email=f"credits_user_purchase_{time.time_ns()}@test.com",
+        hashed_password=get_password_hash("pass"),
+        is_active=True,
+    )
     db.add(user)
     db.commit()
-    initialize_user_credits(db, user.id, 10)
+    ensure_user_credits(db, user.id)  # Starts with 5
 
-    purchase_credits(db, user.id, 250, "Pro Plan Upgrade")
+    # User buys Starter Pack: 10 application credits
+    purchase_credits(db, user.id, 10, "Razorpay Paid: Starter Pack (+10 Credits)")
     bal = db.query(CreditBalance).filter(CreditBalance.user_id == user.id).first()
-    assert bal.balance == 260
-    assert bal.total_purchased == 250
+    assert bal.balance == 15
+    assert bal.total_purchased == 10

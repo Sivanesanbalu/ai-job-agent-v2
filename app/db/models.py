@@ -351,9 +351,11 @@ class Plan(Base):
     name = Column(String(100), nullable=False)
     slug = Column(String(100), unique=True, index=True, nullable=False)
     price_inr = Column(Integer, default=0, nullable=False)
-    included_applications = Column(Integer, default=100, nullable=False)
-    extra_application_cost_inr = Column(Integer, default=1, nullable=False)  # ₹100 per 100 applications
+    included_applications = Column(Integer, default=5, nullable=False)
+    extra_application_cost_inr = Column(Integer, default=1, nullable=False)
     features = Column(JSON, default=list, nullable=False)
+    billing_type = Column(String(50), default="pay_as_you_go", nullable=False)  # free, pay_as_you_go
+    tag = Column(String(50), default="", nullable=True)  # Popular, Best Value
     is_active = Column(Boolean, default=True, nullable=False)
 
 
@@ -362,10 +364,11 @@ class CreditBalance(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True, nullable=False)
-    balance = Column(Integer, default=100, nullable=False)
-    total_included = Column(Integer, default=100, nullable=False)
+    balance = Column(Integer, default=5, nullable=False)
+    total_included = Column(Integer, default=5, nullable=False)
     total_purchased = Column(Integer, default=0, nullable=False)
     total_used = Column(Integer, default=0, nullable=False)
+    last_monthly_grant_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     updated_at = Column(
         DateTime,
         default=datetime.datetime.utcnow,
@@ -399,8 +402,15 @@ class Payment(Base):
     amount_inr = Column(Integer, nullable=False)
     currency = Column(String(10), default="INR", nullable=False)
     status = Column(String(50), default="pending", index=True, nullable=False)  # pending, completed, failed
-    provider = Column(String(50), default="simulation", nullable=False)
+    provider = Column(String(50), default="razorpay", nullable=False)
     provider_tx_id = Column(String(255), default="", nullable=False)
+    razorpay_order_id = Column(String(255), unique=True, index=True, nullable=True)
+    razorpay_payment_id = Column(String(255), unique=True, index=True, nullable=True)
+    razorpay_signature = Column(String(255), nullable=True)
+    pack_slug = Column(String(100), nullable=True)
+    credits_granted = Column(Integer, default=0, nullable=False)
+    webhook_payload = Column(JSON, default=dict, nullable=True)
+    error_reason = Column(String(255), nullable=True)
     receipt_url = Column(String(512), default="", nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True, nullable=False)
 

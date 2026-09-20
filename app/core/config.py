@@ -60,9 +60,20 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8000",
     ]
 
+    # Razorpay Payment Gateway
+    RAZORPAY_KEY_ID: str = Field(
+        default_factory=lambda: os.getenv("RAZORPAY_KEY_ID", "rzp_test_placeholder_key")
+    )
+    RAZORPAY_KEY_SECRET: str = Field(
+        default_factory=lambda: os.getenv("RAZORPAY_KEY_SECRET", "placeholder_secret")
+    )
+    RAZORPAY_WEBHOOK_SECRET: str = Field(
+        default_factory=lambda: os.getenv("RAZORPAY_WEBHOOK_SECRET", "placeholder_webhook_secret")
+    )
+
     # Application Defaults & Limits
-    FREE_SIGNUP_CREDITS: int = 100
-    CREDIT_PRICE_PER_100_INR: int = 100
+    FREE_SIGNUP_CREDITS: int = 5
+    FREE_MONTHLY_CREDITS: int = 5
 
     def init_storage(self) -> None:
         self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

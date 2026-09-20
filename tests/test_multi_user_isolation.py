@@ -198,10 +198,10 @@ def test_three_user_concurrent_isolation():
                 results = [f.result() for f in futures]
 
             assert len(results) == 3
-            # Each user started with 100 credits, now has 99
+            # Each user started with 5 credits, now has 4
             for u in [user_a, user_b, user_c]:
                 bal = client.get("/api/v1/credits", headers=u["headers"]).json()
-                assert bal["balance"] == 99, f"User {u['user_id']} balance was {bal['balance']}, expected 99"
+                assert bal["balance"] == 4, f"User {u['user_id']} balance was {bal['balance']}, expected 4"
 
         finally:
             db.close()
