@@ -291,9 +291,9 @@ class UserAutomationController:
             resume_file_path = active_resume.file_path if active_resume else None
 
             # Prepare rich Candidate package for AIFormAgent and BrowserExecutor
-            first_name = profile.first_name if profile and profile.first_name else (user.full_name.split()[0] if user.full_name else "Candidate")
-            last_name = profile.last_name if profile and profile.last_name else (user.full_name.split()[-1] if user.full_name and len(user.full_name.split()) > 1 else "")
-            full_name = f"{first_name} {last_name}".strip() if (first_name or last_name) else (user.full_name or "Candidate")
+            first_name = profile.first_name if profile and profile.first_name else "Candidate"
+            last_name = profile.last_name if profile and profile.last_name else ""
+            full_name = f"{first_name} {last_name}".strip() if (first_name or last_name) else "Candidate"
 
             custom_ans = app_profile.custom_answers if app_profile and app_profile.custom_answers else {}
 
