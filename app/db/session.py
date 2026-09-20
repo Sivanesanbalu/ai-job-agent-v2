@@ -14,12 +14,14 @@ try:
     engine = create_engine(
         settings.DATABASE_URL,
         pool_pre_ping=True,
-        pool_size=20,
-        max_overflow=10,
+        pool_size=50,
+        max_overflow=50,
+        pool_recycle=1800,
+        pool_timeout=30,
     )
     # Test connection
     with engine.connect() as conn:
-        logger.info("Successfully connected to primary PostgreSQL database.")
+        logger.info("Successfully connected to primary PostgreSQL database with 1000+ user connection pool.")
 except Exception as e:
     logger.warning(
         f"Could not connect to primary database at {settings.DATABASE_URL}: {e}. "

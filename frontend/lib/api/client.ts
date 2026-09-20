@@ -193,6 +193,14 @@ class ApiClient {
       this.request(`/applications/${id}/reject`, {
         method: "POST",
       }),
+    submit: (id: number) =>
+      this.request<{ status: string; application_id: number }>(`/applications/${id}/submit`, {
+        method: "POST",
+      }),
+    submitAllReady: () =>
+      this.request<{ status: string; submitted_count: number; application_ids: number[] }>("/applications/submit-all-ready", {
+        method: "POST",
+      }),
   };
 
   // Automation APIs

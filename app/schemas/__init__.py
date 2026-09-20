@@ -233,6 +233,7 @@ class ApplicationOut(BaseModel):
     error_message: Optional[str] = None
     verification_reason: Optional[str] = None
     submitted_at: Optional[datetime.datetime] = None
+    submission_data: Optional[Dict[str, Any]] = Field(default_factory=dict)
     created_at: datetime.datetime
     updated_at: datetime.datetime
     job: Optional[JobListingOut] = None

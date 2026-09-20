@@ -122,6 +122,7 @@ export interface Application {
   error_message?: string | null;
   verification_reason?: string | null;
   submitted_at?: string | null;
+  submission_data?: Record<string, any>;
   created_at: string;
   updated_at: string;
   job?: JobListing;

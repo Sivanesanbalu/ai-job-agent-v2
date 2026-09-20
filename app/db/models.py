@@ -261,6 +261,7 @@ class JobMatch(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "job_id", name="uq_user_job_match"),
+        Index("ix_job_matches_user_score", "user_id", "match_score"),
     )
 
     job = relationship("JobListing")
@@ -278,6 +279,7 @@ class Application(Base):
     error_message = Column(Text, default="", nullable=True)
     verification_reason = Column(Text, default="", nullable=True)
     match_score = Column(Integer, default=0, nullable=False)
+    submission_data = Column(JSON, default=dict, nullable=False)
     submitted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True, nullable=False)
     updated_at = Column(
@@ -289,6 +291,8 @@ class Application(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "job_id", name="uq_user_job_application"),
+        Index("ix_applications_user_status", "user_id", "status"),
+        Index("ix_applications_user_created", "user_id", "created_at"),
     )
 
     user = relationship("User", back_populates="applications")
@@ -392,6 +396,10 @@ class CreditTransaction(Base):
     description = Column(String(255), default="", nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True, nullable=False)
 
+    __table_args__ = (
+        Index("ix_credit_transactions_user_date", "user_id", "created_at"),
+    )
+
 
 class Payment(Base):
     __tablename__ = "payments"
@@ -426,6 +434,10 @@ class Notification(Base):
     is_read = Column(Boolean, default=False, index=True, nullable=False)
     metadata_json = Column(JSON, default=dict, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True, nullable=False)
+
+    __table_args__ = (
+        Index("ix_notifications_user_read", "user_id", "is_read"),
+    )
 
     user = relationship("User", back_populates="notifications")
 

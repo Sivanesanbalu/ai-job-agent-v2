@@ -30,6 +30,20 @@ export default function DashboardPage() {
   const [recentJobs, setRecentJobs] = useState<JobListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [submittingAppId, setSubmittingAppId] = useState<number | null>(null);
+
+  const handleQuickSubmit = async (appId: number) => {
+    setSubmittingAppId(appId);
+    try {
+      await api.applications.submit(appId);
+      await fetchDashboardData();
+      await refreshUserData();
+    } catch (err) {
+      console.error("Quick submit error:", err);
+    } finally {
+      setSubmittingAppId(null);
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -129,6 +143,33 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Credit Warning & Auto-Upgrade Card */}
+      {creditsRemaining === 0 && (
+        <div className="rounded-2xl border border-amber-300 bg-linear-to-r from-amber-50 to-orange-50 p-5 shadow-xs">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
+                <Zap className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Free Monthly Allowance Exhausted (0 Credits Remaining)
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Your 5 free applications have been used. Top up with Starter Pack (10 credits for ₹149) or Job Seeker Pack (25 credits for ₹299) to keep applying automatically.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/billing"
+              className="shrink-0 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 transition"
+            >
+              Get Application Credits &rarr;
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Live Automation Status Banner */}
       <div className="rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50/70 via-white to-violet-50/50 p-6 shadow-xs">
@@ -278,11 +319,22 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5">
+                    {app.status === "ready_to_submit" && (
+                      <button
+                        onClick={() => handleQuickSubmit(app.id)}
+                        disabled={submittingAppId === app.id}
+                        className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700 transition shadow-xs"
+                      >
+                        {submittingAppId === app.id ? "Submitting..." : "Submit Now"}
+                      </button>
+                    )}
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
                         app.status === "submitted"
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : app.status === "ready_to_submit"
+                          ? "bg-blue-50 text-blue-700 border border-blue-200"
                           : app.status === "verification_required"
                           ? "bg-amber-50 text-amber-700 border border-amber-200"
                           : "bg-indigo-50 text-indigo-700 border border-indigo-200"

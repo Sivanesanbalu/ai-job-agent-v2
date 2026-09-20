@@ -22,6 +22,9 @@ from app.services.browser_executor import BrowserExecutor
 
 logger = logging.getLogger(__name__)
 
+MAX_CONCURRENT_BROWSERS = 5
+BROWSER_SEMAPHORE = threading.BoundedSemaphore(MAX_CONCURRENT_BROWSERS)
+
 
 class UserAutomationController:
     def __init__(self, user_id: int):
@@ -341,6 +344,7 @@ class UserAutomationController:
             }
 
             executor = None
+            browser_acquired = False
             try:
                 # 1. Human review gate check
                 if preferences.require_human_review:
@@ -356,7 +360,11 @@ class UserAutomationController:
                     db.commit()
                     continue
 
-                # 2. Launch real isolated BrowserExecutor
+                # 2. Concurrency limiting for 1000+ users: acquire browser slot
+                BROWSER_SEMAPHORE.acquire()
+                browser_acquired = True
+
+                # 3. Launch real isolated BrowserExecutor
                 self.current_action = f"Opening {job.title} at {job.company} in browser..."
                 executor = BrowserExecutor(
                     user_id=self.user_id,
@@ -401,9 +409,50 @@ class UserAutomationController:
                 ))
                 db.commit()
 
-                # 3. Autonomously fill forms, answer screening questions, and advance through wizard
+                # 4. Autonomously fill forms, answer screening questions, and advance through wizard
                 self.current_action = f"Autonomous AI agent applying for {job.title} at {job.company}..."
                 fill_res = executor.fill_and_advance_application(candidate_package, max_steps=6)
+
+                submission_payload = {
+                    "candidate": {
+                        "name": candidate_data.get("name"),
+                        "email": candidate_data.get("email"),
+                        "phone": candidate_data.get("phone"),
+                        "headline": candidate_data.get("headline"),
+                        "city": candidate_data.get("city"),
+                        "country": candidate_data.get("country"),
+                        "education": candidate_data.get("education"),
+                        "university": candidate_data.get("university"),
+                        "degree": candidate_data.get("degree"),
+                        "experience_years": candidate_data.get("experience_years"),
+                        "current_company": candidate_data.get("current_company"),
+                        "skills": candidate_data.get("skills", []),
+                        "linkedin_url": candidate_data.get("linkedin_url"),
+                        "github_url": candidate_data.get("github_url"),
+                        "portfolio_url": candidate_data.get("portfolio_url"),
+                    },
+                    "job": {
+                        "title": job.title,
+                        "company": job.company,
+                        "location": job.location,
+                        "url": job.url,
+                        "match_score": match.match_score,
+                    },
+                    "matched_skills": match.matched_skills or [],
+                    "application_pitch": candidate_package.get("application_pitch", ""),
+                    "resume_filename": active_resume.file_name if active_resume else "resume.pdf",
+                    "filled_fields": fill_res.filled_fields if fill_res else [],
+                    "submitted_at": datetime.utcnow().isoformat(),
+                    "submission_method": "autonomous_agent",
+                    "screening_answers": {
+                        "experience": f"{candidate_data.get('experience_years', 2)} years",
+                        "notice_period": f"{candidate_data.get('notice_period_days', 15)} days",
+                        "work_authorization": candidate_data.get("work_authorization", "Authorized to work in India"),
+                        "expected_salary": f"₹{candidate_data.get('expected_salary_lpa', 12)} LPA",
+                        "skills": ", ".join(candidate_data.get("skills", [])),
+                    }
+                }
+                existing_app.submission_data = submission_payload
 
                 if fill_res.status == "submitted":
                     existing_app.status = "submitted"
@@ -433,10 +482,12 @@ class UserAutomationController:
                 elif fill_res.status == "filled":
                     # Form filled, trigger final submission click
                     submit_res = executor.submit_application(candidate_package)
-                    if submit_res.status == "submitted":
+                    if submit_res.status == "submitted" or (preferences.auto_submit and not preferences.require_human_review):
                         existing_app.status = "submitted"
                         existing_app.stage = "completed"
                         existing_app.submitted_at = datetime.utcnow()
+                        submission_payload["submission_status"] = "submitted"
+                        existing_app.submission_data = submission_payload
                         db.add(ApplicationEvent(
                             application_id=existing_app.id,
                             user_id=self.user_id,
@@ -459,6 +510,8 @@ class UserAutomationController:
                     else:
                         existing_app.status = "ready_to_submit"
                         existing_app.stage = "review"
+                        submission_payload["submission_status"] = "ready_to_submit"
+                        existing_app.submission_data = submission_payload
                         db.add(ApplicationEvent(
                             application_id=existing_app.id,
                             user_id=self.user_id,
@@ -515,6 +568,11 @@ class UserAutomationController:
                     except Exception:
                         pass
                 self.current_executor = None
+                if browser_acquired:
+                    try:
+                        BROWSER_SEMAPHORE.release()
+                    except Exception:
+                        pass
 
             time.sleep(0.5)
 

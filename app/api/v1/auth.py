@@ -85,27 +85,9 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
     )
     db.add(app_profile)
 
-    # 5. Initialize Credit Balance (100 free applications)
-    credit_bal = CreditBalance(
-        user_id=user.id,
-        balance=settings.FREE_SIGNUP_CREDITS,
-        total_included=settings.FREE_SIGNUP_CREDITS,
-        total_purchased=0,
-        total_used=0,
-    )
-    db.add(credit_bal)
-    db.flush()
-
-    tx = CreditTransaction(
-        user_id=user.id,
-        application_id=None,
-        type="grant",
-        amount=settings.FREE_SIGNUP_CREDITS,
-        balance_before=0,
-        balance_after=settings.FREE_SIGNUP_CREDITS,
-        description="Welcome Bonus: 100 Free Job Applications",
-    )
-    db.add(tx)
+    # 5. Initialize Credit Balance (5 free monthly applications)
+    from app.services.credit_service import ensure_user_credits
+    ensure_user_credits(db, user.id)
 
     db.commit()
     db.refresh(user)
@@ -191,7 +173,8 @@ def logout(current_user: User = Depends(get_current_user)):
 
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    cb = db.query(CreditBalance).filter(CreditBalance.user_id == current_user.id).first()
+    from app.services.credit_service import ensure_user_credits
+    cb = ensure_user_credits(db, current_user.id)
     credits_rem = cb.balance if cb else 0
 
     return {

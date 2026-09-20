@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 import logging
 import sqlite3
 from pathlib import Path
+from sqlalchemy import text
 from app.db.session import SessionLocal
-from app.db.models import JobListing, Plan
+from app.db.models import JobListing, Plan, CreditBalance
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +11,33 @@ logger = logging.getLogger(__name__)
 def migrate_legacy_data() -> None:
     session = SessionLocal()
     try:
+        # 0. Add missing columns and indexes to PostgreSQL
+        try:
+            session.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS submission_data JSON DEFAULT '{}'::json;"))
+            session.execute(text("CREATE INDEX IF NOT EXISTS ix_applications_user_status ON applications(user_id, status);"))
+            session.execute(text("CREATE INDEX IF NOT EXISTS ix_applications_user_created ON applications(user_id, created_at);"))
+            session.execute(text("CREATE INDEX IF NOT EXISTS ix_job_matches_user_score ON job_matches(user_id, match_score);"))
+            session.execute(text("CREATE INDEX IF NOT EXISTS ix_credit_transactions_user_date ON credit_transactions(user_id, created_at);"))
+            session.execute(text("CREATE INDEX IF NOT EXISTS ix_notifications_user_read ON notifications(user_id, is_read);"))
+            session.commit()
+            logger.info("Database schema columns and performance indexes verified.")
+        except Exception as e:
+            session.rollback()
+            logger.warning(f"Schema column upgrade note: {e}")
+
+        # 0.1 Normalize legacy Free users who never purchased packs to 5 monthly credits
+        try:
+            legacy_free_bals = session.query(CreditBalance).filter(CreditBalance.total_purchased == 0, CreditBalance.balance > 5).all()
+            for lfb in legacy_free_bals:
+                lfb.balance = 5
+                lfb.total_included = 5
+            session.commit()
+            if legacy_free_bals:
+                logger.info(f"Normalized {len(legacy_free_bals)} legacy accounts to 5 monthly free credits.")
+        except Exception as e:
+            session.rollback()
+            logger.warning(f"Credit balance normalization note: {e}")
+
         # Seed or sync Free + Pay-as-you-go credit packs
         desired_packs = [
             {

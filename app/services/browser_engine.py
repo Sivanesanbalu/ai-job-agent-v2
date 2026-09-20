@@ -60,6 +60,11 @@ class BrowserEngine:
         "successfully applied",
         "application received",
         "your application was submitted",
+        "application sent",
+        "your application was sent",
+        "we received your application",
+        "we've received your application",
+        "applied",
     )
 
     SUBMIT_TEXTS = (
@@ -67,10 +72,13 @@ class BrowserEngine:
         "submit application now",
         "submit your application",
         "submit",
+        "send application",
         "apply now",
         "apply",
         "finish application",
         "complete application",
+        "submit resume",
+        "confirm application",
     )
 
     def __init__(
@@ -311,13 +319,28 @@ class BrowserEngine:
         if self.page is None:
             raise RuntimeError("Application page is not open.")
 
-        # Check if form is already open
-        page_info = self.inspect_application_page()
-        visible_form_inputs = [
-            i for i in page_info["inputs"]
-            if i.get("visible") and i.get("type", "").lower() not in {"search", "hidden", "submit", "button"}
-        ]
-        if len(visible_form_inputs) >= 2:
+        # Check if an actual application modal/form is currently open
+        is_form_open = False
+        try:
+            modal_loc = self.page.locator('[role="dialog"], .jobs-easy-apply-modal, .application-modal, form[class*="apply"], form.application-form')
+            if modal_loc.count() > 0 and modal_loc.first.is_visible(timeout=500):
+                is_form_open = True
+        except Exception:
+            pass
+
+        if not is_form_open:
+            url_lower = (self.page.url or "").lower()
+            ats_domains = ["greenhouse.io", "lever.co", "workday", "ashbyhq.com", "myworkdayjobs", "smartrecruiters", "bamboohr", "/apply"]
+            if any(ats in url_lower for ats in ats_domains):
+                page_info = self.inspect_application_page()
+                form_fields = [
+                    i for i in page_info["inputs"]
+                    if i.get("visible") and i.get("type", "").lower() in {"text", "email", "tel", "file"}
+                ]
+                if len(form_fields) >= 2:
+                    is_form_open = True
+
+        if is_form_open:
             return {"clicked": True, "action": "already_on_form", "url": self.page.url}
 
         apply_selectors = [
@@ -1159,7 +1182,7 @@ class BrowserEngine:
             raise RuntimeError("Application page is not open.")
 
         buttons = self.page.locator(
-            "button, input[type='submit'], input[type='button']"
+            "button, input[type='submit'], input[type='button'], [role='button'], a.btn, a.button, a[class*='submit'], a[class*='apply']"
         )
 
         count = buttons.count()
