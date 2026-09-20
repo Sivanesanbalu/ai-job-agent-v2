@@ -4,6 +4,7 @@ __pycache__/
 .env
 .DS_Store
 *.log
+.browser_test/
 
 # Databases & local sessions
 *.db

@@ -1,0 +1,61 @@
+{
+  "source": "resume",
+  "resume_path": "/Users/sivanesanbalu/Downloads/package121/data/resumes/Sivanesan_B_AI_Engineer_Resume.pdf",
+  "name": "Sivanesan B",
+  "email": "apsiva69@gmail.com",
+  "phone": "+91-8438692752",
+  "skills": [
+    "Python",
+    "Generative AI",
+    "LLMs",
+    "RAG",
+    "AI Agents",
+    "Prompt Engineering",
+    "LangChain",
+    "LangGraph",
+    "PyTorch",
+    "Hugging Face",
+    "FAISS",
+    "FastAPI",
+    "Docker",
+    "SQL",
+    "NLP",
+    "Computer Vision",
+    "Embeddings",
+    "Fine-tuning",
+    "AI Automation",
+    "Machine Learning",
+    "Deep Learning",
+    "REST APIs",
+    "Git",
+    "GitHub",
+    "Firebase",
+    "AWS"
+  ],
+  "roles": [
+    "AI Engineer",
+    "Prompt Engineer"
+  ],
+  "experience_years": 0.0,
+  "education": [
+    "B.Tech in Artificial Intelligence and Data Science(Lateral Entry)",
+    "ber network nodes in a live telecommunications",
+    "Best Final Year Project Award – Eco-Transformers Aug 2025",
+    "Best Final Year Project Award from the Department of Artificial Intelligence & Data Science, Kumaraguru",
+    "beddings, Voice AI",
+    "Diploma in Computer Engineering"
+  ],
+  "certifications": [
+    "IBM AI Engineering Professional Certificate",
+    "Forage",
+    "Udacity"
+  ],
+  "locations": [
+    "Coimbatore"
+  ],
+  "projects": [
+    "Eco-Transformers: AI Environmental Intelligence",
+    "Autonomous AI Job Application Agent"
+  ],
+  "raw_text": "Sivanesan B\nCoimbatore | apsiva69@gmail.com | +91-8438692752 | github.com/Sivanesanbalu |\nlinkedin.com/in/sivanesan-b-871ba7264 | sivanesanbalu.netlify.app\nProfile Summary\nAI Engineer specializing in Generative AI, Large Language Models, prompt engineering, and AI-powered applications.\nIEEE-published researcher with work in carbon-efficient LLM inference, achieving 58% lower CO2 emissions and 56% faster\ninference. Currently working as a GenAI Executive & Prompt Engineer, developing LLM-based solutions, prompt workflows,\nAI agents, and RAG applications for practical business use cases. Hands-on experience with Python, PyTorch, Hugging\nFace, LangChain, LangGraph, FAISS, FastAPI, and Docker, with additional experience in computer vision, voice AI, and\nMLOps.\nExperience\nGenAI Executive & Prompt Engineer|Nunes Instruments Aug 2026 – Present\n• Developing LLM-based applications and Generative AI workflows to automate business processes and work with\nunstructured business data.\n• Designing and evaluating prompts for information extraction, classification, summarization, and structured LLM\noutputs, with a focus on improving response accuracy and consistency.\n• Building AI automation and agentic workflows that connect LLMs with business data and APIs to support practical\noperational use cases.\nAI Coder (Graduate Apprentice)|Madhu Jayanti International Pvt. Ltd.Jul 2026 – Aug 2026\n• Built workflow automations using openpyxl to process large volumes of operational data and generate structured reports\nfor business workflows.\n• Automated the collection and processing of IoT machine data generated during production shifts, converting machine\nactivity into shift-wise operational reports.\n• Automated shift-end notifications by sending generated machine reports through email and WhatsApp to the assigned\nworkers, reducing manual reporting and ensuring timely updates.\nInnovation Engineer Trainee|Forge Innovation & Ventures, CoimbatoreJan 2025 – Jul 2025\n• Built an offline voice-driven AI inventory assistant using Whisper STT and a quantized on-device LLM to help\nwarehouse teams search and retrieve stock information through voice commands.\n• Integrated FAISS-based semantic search with the local LLM pipeline to retrieve relevant inventory information without\nrelying on an internet connection.\n• Reduced manual stock-lookup time by approximately 45% across 3 warehouse pilots while maintaining zero internet\ndependency.\nIntern – Data Networking & Infrastructure|Bharat Sanchar Nigam Limited (BSNL)Jun 2022 – Jul 2022\n• Observed real-time signal routing and data transmission across optical fiber network nodes in a live telecommunications\nenvironment.\n• Studied how network traffic moved across connected nodes, with a focus on transmission paths, latency, and network\nperformance.\n• Gained practical exposure to large-scale data transmission infrastructure and the operational characteristics of telecom\nnetwork systems.\nAchievements\nBest Final Year Project Award – Eco-Transformers Aug 2025\nReceived the Best Final Year Project Award from the Department of Artificial Intelligence & Data Science, Kumaraguru\nCollege of Technology, for research on carbon-efficient LLM inference.\nPublications\nEco-Transformers: Carbon-Efficient and Accelerated Inference through\nSelf-Pruning and Activation Freezing in LLMs\nAug 2025\n3rd International Conference on Next Generation Computing Systems (ICNGCS-2025), PSG iTech, Coimbatore\nDOI:10.1109/ICNGCS64900.2025.11183217\nProjects\nWhatsApp Product & Price Intelligence GitHub\n• Built a local AI system that analyzes WhatsApp conversations and extracts product names, prices, quotations, and\nother business details from customer messages and shared files.\n• Turned unstructured chat history into structured product–price records and automated reports showing which products\nwere discussed, the prices mentioned, and related quotation details.\n• Built a searchable SQLite-based archive for messages, attachments, and chat metadata, making historical product and\npricing information easier to find and review.\nTechnologies Used:Python, Generative AI, LLMs, Prompt Engineering, SQLite, Flask, WhatsApp Export, Document\nProcessing, Automation.\nAI Book Scanner APK\n• Built a Flutter mobile app that recognizes book covers using a fine-tuned ConvNeXt model, reaching 92% detection\naccuracy across 1,000+ test images.\n• Deployed the model through a FastAPI inference service designed to support 100+ concurrent users, with FAISS-based\nsearch for related book information.\n• Added VLM and LLM-based processing to enrich recognized books with relevant information and provide a more useful\nsearch and discovery experience.\nTechnologies Used:Flutter, Firebase, FastAPI, PyTorch, ConvNeXt, FAISS, VLM, LLM, Transfer Learning.\nAI Recruiter GitHub\n• Built an end-to-end voice interview platform using Vapi and OpenRouter LLMs to conduct real-time candidate\ninterviews, generate questions dynamically, and evaluate responses automatically.\n• Tested the platform across 50+ mock interviews, reducing manual HR screening time by 70%; added BlazeFace-based\ncomputer vision proctoring running at 30 FPS with under 50ms latency.\nTechnologies Used:Next.js, JavaScript, OpenRouter API, Supabase, BlazeFace, Vapi, Clerk, Computer Vision.\nTechnical Skills\nAI & ML:Machine Learning, Deep Learning, NLP, Computer Vision, Generative AI, LLMs, VLMs, RAG, AI Agents,\nPrompt Engineering, Fine-tuning, Embeddings, Voice AI\nProgramming:Python, SQL, TypeScript, C++, R\nFrameworks:PyTorch, TensorFlow, Transformers, LangChain, LangGraph, FastAPI, Flask, OpenCV, LoRA, QLoRA\nVector DB & Search:FAISS, ChromaDB, Semantic Search\nData & AI Systems:SQLite, OpenPyXL, IoT Data Processing, Document Processing, WhatsApp Export Processing,\nSpeech-to-Text\nCloud & DevOps:Docker, Google Cloud, Firebase, Supabase, Hugging Face Hub, Git, GitHub\nAI Tools & APIs:n8n, Vapi, OpenRouter API, REST APIs, API Integration, AI Automation, Model Deployment, QA\nAutomation\nProfessional Certifications:IBM AI Engineering Professional Certificate, AWS AI & ML Scholars (Udacity), Tata\nGenAI Job Simulation (Forage)\nEducation\nB.Tech in Artificial Intelligence and Data Science(Lateral Entry)\nKumaraguru College of Technology, Coimbatore| CGPA: 8.02/10\n2023 – 2026\nDiploma in Computer Engineering\nTamilnadu Government Polytechnic College, Madurai| CGPA: 8.0/10\n2020 – 2023"
+}
