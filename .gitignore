@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+*.log
+
+# Databases & local sessions
+*.db
+*.sqlite3
+data/resumes/*
+!data/resumes/.gitkeep
+data/browser_sessions/*
+!data/browser_sessions/.gitkeep
+data/uploads/*
+!data/uploads/.gitkeep
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+.pytest_cache/

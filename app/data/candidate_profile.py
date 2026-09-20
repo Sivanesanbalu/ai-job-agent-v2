@@ -1,0 +1,48 @@
+from app.models.candidate_profile import CandidateProfile
+
+
+CANDIDATE_PROFILE = CandidateProfile(
+    name="Sivanesan B",
+    email=None,
+    headline="AI Engineer | Generative AI | LLMs | AI Agents | Prompt Engineering",
+    experience_years=0.1,
+    preferred_roles=[
+        "AI Engineer",
+        "Generative AI Engineer",
+        "GenAI Engineer",
+        "LLM Engineer",
+        "AI Automation Engineer",
+        "AI Agent Engineer",
+        "Prompt Engineer",
+        "Python AI Engineer",
+        "Machine Learning Engineer",
+    ],
+    preferred_locations=[
+        "Chennai",
+        "Coimbatore",
+        "Bangalore",
+    ],
+    skills=[
+        "Python",
+        "Generative AI",
+        "LLMs",
+        "Prompt Engineering",
+        "RAG",
+        "AI Agents",
+        "LangChain",
+        "LangGraph",
+        "PyTorch",
+        "Hugging Face",
+        "FAISS",
+        "FastAPI",
+        "Docker",
+        "SQL",
+        "NLP",
+        "Computer Vision",
+        "Embeddings",
+        "Fine-tuning",
+        "AI Automation",
+    ],
+    education="B.Tech in Artificial Intelligence and Data Science",
+    notice_period_days=5,
+)

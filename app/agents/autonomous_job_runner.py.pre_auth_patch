@@ -1,0 +1,460 @@
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+from app.agents.application_manager import (
+    transition_application_status,
+)
+from app.agents.application_workflow import (
+    run_application_workflow,
+)
+from app.config import MIN_MATCH_SCORE
+from app.intelligence.ai_job_analyzer import (
+    AIJobAnalyzer,
+)
+from app.models.job import Job
+from app.services.browser_executor import (
+    BrowserExecutor,
+)
+from app.services.job_page_reader import (
+    JobPageReader,
+)
+from app.services.portal_job_discovery import (
+    discover_real_jobs,
+    portal_results_to_jobs,
+)
+
+
+DB_PATH = Path("jobs.db")
+
+
+def upsert_job(
+    job: Job,
+) -> None:
+    connection = sqlite3.connect(
+        DB_PATH
+    )
+
+    try:
+        connection.execute(
+            """
+            INSERT INTO jobs (
+                title,
+                company,
+                location,
+                url,
+                description,
+                experience_years,
+                salary,
+                source,
+                match_score,
+                application_status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(url) DO UPDATE SET
+                title=excluded.title,
+                company=excluded.company,
+                location=excluded.location,
+                description=excluded.description,
+                experience_years=excluded.experience_years,
+                salary=excluded.salary,
+                source=excluded.source,
+                match_score=excluded.match_score
+            """,
+            (
+                job.title,
+                job.company,
+                job.location,
+                job.url,
+                job.description,
+                job.experience_years,
+                job.salary,
+                str(job.source),
+                job.match_score,
+                job.application_status,
+            ),
+        )
+
+        connection.commit()
+
+    finally:
+        connection.close()
+
+
+def already_processed(
+    url: str,
+) -> bool:
+    connection = sqlite3.connect(
+        DB_PATH
+    )
+
+    try:
+        row = connection.execute(
+            """
+            SELECT application_status
+            FROM jobs
+            WHERE url = ?
+            """,
+            (url,),
+        ).fetchone()
+
+        if not row:
+            return False
+
+        return row[0] in {
+            "submitted",
+            "application_started",
+            "ready_for_submission",
+            "approved_for_application",
+            "application_candidate",
+        }
+
+    finally:
+        connection.close()
+
+
+def enrich_job(
+    job: Job,
+    page_reader: JobPageReader,
+) -> Job:
+    page = page_reader.read(
+        job.url
+    )
+
+    if page.title:
+        job.title = page.title
+
+    if page.company:
+        job.company = page.company
+
+    if page.location:
+        job.location = page.location
+
+    if page.description:
+        job.description = page.description
+
+    if page.salary:
+        job.salary = page.salary
+
+    return job
+
+
+def run(
+    max_discovery_queries: int = 12,
+    max_jobs_to_analyze: int = 30,
+    auto_apply: bool = True,
+):
+    print("=" * 70)
+    print("AI JOB AGENT — AUTONOMOUS ONLINE RUN")
+    print("=" * 70)
+
+    print(
+        "\nPHASE 1: DISCOVERY"
+    )
+
+    discovered = discover_real_jobs(
+        max_queries=max_discovery_queries,
+        headless=False,
+    )
+
+    jobs = portal_results_to_jobs(
+        discovered
+    )
+
+    print(
+        f"\nDiscovered URLs: {len(jobs)}"
+    )
+
+    # Keep unique URLs.
+    unique = {}
+
+    for job in jobs:
+        unique[job.url] = job
+
+    jobs = list(
+        unique.values()
+    )
+
+    # Analyze a bounded number during first live run.
+    jobs = jobs[
+        :max_jobs_to_analyze
+    ]
+
+    print(
+        f"Jobs selected for deep analysis: "
+        f"{len(jobs)}"
+    )
+
+    analyzer = AIJobAnalyzer()
+
+    print(
+        f"AI model: "
+        f"{analyzer.model or 'NONE'}"
+    )
+
+    if not analyzer.is_available():
+        raise RuntimeError(
+            "\nOllama is not available.\n"
+            "Start Ollama and install a local model first.\n"
+            "Example:\n"
+            "  ollama serve\n"
+            "  ollama list\n"
+        )
+
+    reader = JobPageReader(
+        headless=False
+    )
+
+    executor = BrowserExecutor()
+
+    applied = []
+    rejected = []
+    blocked = []
+    failed = []
+
+    try:
+        reader.start()
+
+        print(
+            "\nPHASE 2: JOB PAGE ENRICHMENT + AI MATCHING"
+        )
+
+        for index, job in enumerate(
+            jobs,
+            1,
+        ):
+            print(
+                "\n" + "-" * 70
+            )
+
+            print(
+                f"[{index}/{len(jobs)}] "
+                f"{job.title}"
+            )
+
+            if already_processed(
+                job.url
+            ):
+                print(
+                    "  SKIP: already processed"
+                )
+                continue
+
+            try:
+                job = enrich_job(
+                    job,
+                    reader,
+                )
+
+                print(
+                    f"  Title   : {job.title}"
+                )
+
+                print(
+                    f"  Company : {job.company}"
+                )
+
+                print(
+                    f"  Location: {job.location}"
+                )
+
+                print(
+                    f"  Salary  : "
+                    f"{job.salary or 'UNKNOWN'}"
+                )
+
+                decision = analyzer.analyze(
+                    job
+                )
+
+                job.match_score = (
+                    decision.score
+                )
+
+                print(
+                    f"  AI score: "
+                    f"{decision.score}"
+                )
+
+                print(
+                    f"  Relevance: "
+                    f"{decision.relevance}"
+                )
+
+                print(
+                    f"  Skills: "
+                    f"{', '.join(decision.matched_skills[:8])}"
+                )
+
+                print(
+                    f"  Decision: "
+                    f"{'APPLY' if decision.apply else 'SKIP'}"
+                )
+
+                print(
+                    f"  Reason: "
+                    f"{decision.reason}"
+                )
+
+                upsert_job(
+                    job
+                )
+
+                if (
+                    not decision.apply
+                    or decision.score < MIN_MATCH_SCORE
+                ):
+                    rejected.append(
+                        job
+                    )
+                    continue
+
+                transition_application_status(
+                    job.url,
+                    "application_candidate",
+                    (
+                        "AI selected job automatically; "
+                        f"match score={decision.score}"
+                    ),
+                )
+
+                job.application_status = (
+                    "application_candidate"
+                )
+
+                if not auto_apply:
+                    print(
+                        "  AUTO APPLY DISABLED"
+                    )
+                    continue
+
+                print(
+                    "  STARTING APPLICATION..."
+                )
+
+                result = (
+                    run_application_workflow(
+                        job,
+                        executor,
+                    )
+                )
+
+                print(
+                    f"  APPLICATION STATUS: "
+                    f"{result.get('status')}"
+                )
+
+                if result.get(
+                    "status"
+                ) == "submitted":
+                    applied.append(
+                        job
+                    )
+
+                elif result.get(
+                    "status"
+                ) in {
+                    "blocked",
+                    "needs_human_input",
+                }:
+                    blocked.append(
+                        job
+                    )
+
+                else:
+                    failed.append(
+                        job
+                    )
+
+            except Exception as exc:
+                print(
+                    f"  ERROR: {exc}"
+                )
+                failed.append(
+                    job
+                )
+
+        print(
+            "\n" + "=" * 70
+        )
+        print(
+            "AUTONOMOUS RUN SUMMARY"
+        )
+        print(
+            "=" * 70
+        )
+
+        print(
+            f"Discovered          : {len(discovered)}"
+        )
+
+        print(
+            f"Deep analyzed       : {len(jobs)}"
+        )
+
+        print(
+            f"AI selected         : {len(applied) + len(blocked) + len(failed)}"
+        )
+
+        print(
+            f"Submitted           : {len(applied)}"
+        )
+
+        print(
+            f"Blocked/verification: {len(blocked)}"
+        )
+
+        print(
+            f"Failed              : {len(failed)}"
+        )
+
+        print(
+            f"AI rejected         : {len(rejected)}"
+        )
+
+        print(
+            "=" * 70
+        )
+
+        if applied:
+            print(
+                "\nSUBMITTED JOBS:"
+            )
+
+            for job in applied:
+                print(
+                    f"  ✓ {job.title} | "
+                    f"{job.company}"
+                )
+
+        if blocked:
+            print(
+                "\nBLOCKED / HUMAN INPUT REQUIRED:"
+            )
+
+            for job in blocked:
+                print(
+                    f"  ! {job.title} | "
+                    f"{job.company}"
+                )
+
+        print(
+            "\nRUN COMPLETE"
+        )
+
+    finally:
+        reader.close()
+
+        try:
+            executor.close()
+        except Exception:
+            pass
+
+
+if __name__ == "__main__":
+    run(
+        max_discovery_queries=12,
+        max_jobs_to_analyze=30,
+        auto_apply=True,
+    )

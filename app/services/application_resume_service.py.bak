@@ -1,0 +1,385 @@
+from __future__ import annotations
+
+from app.agents.application_preparer import prepare_application
+from app.models.application_execution_result import ApplicationExecutionResult
+from app.models.job import Job
+from app.services.application_human_input import merge_human_input
+from app.services.application_resume_validator import validate_resume_input
+from app.services.application_state_mapper import map_browser_state
+
+
+class ApplicationResumeService:
+    """
+    Human-controlled resume/refill service.
+
+    Responsibilities:
+    1. Prepare the original application package.
+    2. Merge explicitly supplied human input.
+    3. Validate required fields.
+    4. Open the application URL in the browser.
+    5. Inspect the browser page.
+    6. Refuse to continue when login/CAPTCHA/human verification is needed.
+    7. Fill only fields supported by the browser/site adapter.
+    8. Re-inspect the page.
+    9. Return ready_for_submission only when required fields are satisfied.
+
+    IMPORTANT:
+    This service NEVER submits the application.
+    Final submission remains behind the existing human confirmation gate.
+    """
+
+    def __init__(self, executor):
+        self.executor = executor
+
+    def _result(
+        self,
+        status: str,
+        message: str,
+        **extra,
+    ) -> dict:
+        result = {
+            "status": status,
+            "message": message,
+            "requires_human_confirmation": True,
+        }
+
+        result.update(extra)
+        return result
+
+    def _get_page_state(self):
+        """
+        Obtain normalized browser workflow state.
+
+        BrowserExecutor already exposes get_application_workflow_state().
+        The fallback keeps this service compatible with simpler test executors.
+        """
+        if hasattr(self.executor, "get_application_workflow_state"):
+            return self.executor.get_application_workflow_state()
+
+        if hasattr(self.executor, "inspect_application_state"):
+            inspection = self.executor.inspect_application_state()
+
+            if hasattr(inspection, "state"):
+                return map_browser_state(inspection.state)
+
+            if isinstance(inspection, dict):
+                state = inspection.get("state")
+                return map_browser_state(state)
+
+        return None
+
+    def resume(
+        self,
+        job: Job,
+        human_input: dict[str, str] | None = None,
+    ) -> dict:
+        """
+        Resume a browser application using explicitly supplied human input.
+
+        The job must already be in application_started state.
+        """
+
+        if job is None:
+            raise ValueError("Job is required.")
+
+        if job.application_status != "application_started":
+            raise ValueError(
+                "Application is not waiting for human input."
+            )
+
+        human_input = human_input or {}
+
+        # ---------------------------------------------------------
+        # 1. Prepare original application package
+        # ---------------------------------------------------------
+        package = prepare_application(job)
+
+        missing_before = validate_resume_input(
+            package,
+            {},
+        )
+
+        # ---------------------------------------------------------
+        # 2. Merge human-provided values
+        # ---------------------------------------------------------
+        updated_package = merge_human_input(
+            package,
+            human_input,
+        )
+
+        missing_after = validate_resume_input(
+            updated_package,
+            human_input,
+        )
+
+        # ---------------------------------------------------------
+        # 3. Required information is still missing
+        # ---------------------------------------------------------
+        if missing_after:
+            return self._result(
+                status="needs_human_input",
+                message=(
+                    "Required application information is still missing."
+                ),
+                job_url=job.url,
+                missing_before=missing_before,
+                missing_after=missing_after,
+                application=updated_package,
+            )
+
+        # ---------------------------------------------------------
+        # 4. Open/reopen browser application
+        # ---------------------------------------------------------
+        try:
+            open_result = self.executor.open_application(
+                job.url
+            )
+        except Exception as exc:
+            return self._result(
+                status="failed",
+                message=f"Unable to open application page: {exc}",
+                job_url=job.url,
+                missing_before=missing_before,
+                missing_after=missing_after,
+                application=updated_package,
+            )
+
+        if not open_result:
+            return self._result(
+                status="failed",
+                message="Browser executor returned no open result.",
+                job_url=job.url,
+                missing_before=missing_before,
+                missing_after=missing_after,
+                application=updated_package,
+            )
+
+        # ---------------------------------------------------------
+        # 5. Inspect browser state before filling
+        # ---------------------------------------------------------
+        try:
+            workflow_state = self._get_page_state()
+        except Exception as exc:
+            return self._result(
+                status="failed",
+                message=f"Unable to inspect browser page: {exc}",
+                job_url=job.url,
+                open_result=open_result,
+                missing_before=missing_before,
+                missing_after=missing_after,
+                application=updated_package,
+            )
+
+        if workflow_state is not None:
+            state_value = getattr(
+                workflow_state,
+                "value",
+                str(workflow_state),
+            )
+
+            # These states require the human to interact manually.
+            if state_value == "needs_login":
+                return self._result(
+                    status="needs_login",
+                    message=(
+                        "Login is required. Complete login manually "
+                        "and resume the application."
+                    ),
+                    job_url=job.url,
+                    workflow_state=state_value,
+                    open_result=open_result,
+                    application=updated_package,
+                )
+
+            if state_value == "needs_human_verification":
+                return self._result(
+                    status="needs_human_verification",
+                    message=(
+                        "Human verification is required. Complete "
+                        "verification manually."
+                    ),
+                    job_url=job.url,
+                    workflow_state=state_value,
+                    open_result=open_result,
+                    application=updated_package,
+                )
+
+            if state_value == "application_complete":
+                return self._result(
+                    status="application_complete",
+                    message=(
+                        "The browser indicates that the application "
+                        "is already complete."
+                    ),
+                    job_url=job.url,
+                    workflow_state=state_value,
+                    open_result=open_result,
+                    application=updated_package,
+                )
+
+            if state_value not in {
+                "ready_to_fill",
+                "needs_human_input",
+            }:
+                return self._result(
+                    status="needs_human_input",
+                    message=(
+                        "The browser page is not in a safe application "
+                        "form state for automatic field filling."
+                    ),
+                    job_url=job.url,
+                    workflow_state=state_value,
+                    open_result=open_result,
+                    application=updated_package,
+                )
+
+        # ---------------------------------------------------------
+        # 6. Build safe fill plan
+        # ---------------------------------------------------------
+        try:
+            fill_plan = self.executor.build_fill_plan(
+                updated_package
+            )
+        except Exception as exc:
+            return self._result(
+                status="failed",
+                message=f"Unable to build fill plan: {exc}",
+                job_url=job.url,
+                open_result=open_result,
+                application=updated_package,
+            )
+
+        # ---------------------------------------------------------
+        # 7. Check required fields before browser interaction
+        # ---------------------------------------------------------
+        required_missing = [
+            item
+            for item in fill_plan
+            if item.get("action") == "skip"
+            and item.get("required")
+            and (
+                "missing" in item.get("reason", "").lower()
+                or "candidate value" in item.get("reason", "").lower()
+                or "required field" in item.get("reason", "").lower()
+            )
+        ]
+
+        if required_missing:
+            return self._result(
+                status="needs_human_input",
+                message=(
+                    "The browser form still contains required fields "
+                    "that cannot be filled automatically."
+                ),
+                job_url=job.url,
+                open_result=open_result,
+                fill_plan=fill_plan,
+                required_fields_needing_input=[
+                    (
+                        item.get("mapped_name")
+                        or item.get("field_name")
+                        or item.get("field", {}).get("name")
+                        or item.get("field", {}).get("id")
+                    )
+                    for item in required_missing
+                ],
+                application=updated_package,
+            )
+
+        # ---------------------------------------------------------
+        # 8. Fill safe fields
+        # ---------------------------------------------------------
+        try:
+            fill_result = self.executor.fill_application(
+                updated_package
+            )
+        except Exception as exc:
+            return self._result(
+                status="failed",
+                message=f"Browser filling failed: {exc}",
+                job_url=job.url,
+                open_result=open_result,
+                fill_plan=fill_plan,
+                application=updated_package,
+            )
+
+        if not fill_result:
+            return self._result(
+                status="failed",
+                message="Browser executor returned no fill result.",
+                job_url=job.url,
+                open_result=open_result,
+                fill_plan=fill_plan,
+                application=updated_package,
+            )
+
+        # ---------------------------------------------------------
+        # 9. Check whether browser filling itself failed
+        # ---------------------------------------------------------
+        fill_status = getattr(
+            fill_result,
+            "status",
+            None,
+        )
+
+        if fill_status == "failed":
+            return self._result(
+                status="failed",
+                message=getattr(
+                    fill_result,
+                    "message",
+                    "Browser filling failed.",
+                ),
+                job_url=job.url,
+                open_result=open_result,
+                fill_plan=fill_plan,
+                fill_result=fill_result,
+                application=updated_package,
+            )
+
+        # ---------------------------------------------------------
+        # 10. Required fields reported by browser executor
+        # ---------------------------------------------------------
+        browser_missing = getattr(
+            fill_result,
+            "required_fields_needing_input",
+            [],
+        )
+
+        if browser_missing:
+            return self._result(
+                status="needs_human_input",
+                message=(
+                    "Some required browser fields still need "
+                    "human input."
+                ),
+                job_url=job.url,
+                open_result=open_result,
+                fill_plan=fill_plan,
+                fill_result=fill_result,
+                required_fields_needing_input=browser_missing,
+                application=updated_package,
+            )
+
+        # ---------------------------------------------------------
+        # 11. Successful refill
+        # ---------------------------------------------------------
+        return self._result(
+            status="ready_for_submission",
+            message=(
+                "Safe application fields were filled successfully. "
+                "Final submission requires explicit human confirmation."
+            ),
+            job_url=job.url,
+            open_result=open_result,
+            fill_plan=fill_plan,
+            fill_result=fill_result,
+            application=updated_package,
+        )
+
+    def close(self) -> None:
+        """
+        Close the browser executor.
+        """
+        if hasattr(self.executor, "close"):
+            self.executor.close()

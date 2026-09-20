@@ -1,0 +1,723 @@
+from __future__ import annotations
+
+import json
+import os
+import re
+from dataclasses import dataclass
+from typing import Any
+
+import requests
+
+from app.config import (
+    MAX_EXPERIENCE_YEARS,
+    MIN_EXPERIENCE_YEARS,
+    MIN_MATCH_SCORE,
+    MIN_SALARY_LPA,
+)
+from app.intelligence.resume_intelligence import (
+    load_resume_profile,
+)
+from app.models.job import Job
+
+
+OLLAMA_BASE_URL = os.getenv(
+    "OLLAMA_BASE_URL",
+    "http://127.0.0.1:11434",
+).rstrip("/")
+
+OLLAMA_MODEL = os.getenv(
+    "OLLAMA_MODEL",
+    "",
+).strip()
+
+
+@dataclass
+class AIJobDecision:
+    apply: bool
+    score: int
+    relevance: str
+    matched_skills: list[str]
+    missing_skills: list[str]
+    experience_match: bool
+    location_match: bool
+    salary_match: bool
+    reason: str
+    model: str
+
+
+class AIJobAnalyzer:
+    """
+    Final job relevance engine.
+
+    Hard constraints:
+        - salary >= configured minimum when salary is known
+        - experience must be within configured range when explicitly stated
+        - location must be relevant
+
+    AI decides:
+        - whether the actual work is relevant to the resume
+        - transferable skill relevance
+        - seniority mismatch
+        - technical fit
+        - overall application score
+
+    No job title whitelist is used.
+    """
+
+    def __init__(
+        self,
+        timeout: float = 60.0,
+    ):
+        self.timeout = timeout
+        self.profile = load_resume_profile()
+        self.model = self._resolve_model()
+
+    # ---------------------------------------------------------------
+    # Ollama
+    # ---------------------------------------------------------------
+
+    def _resolve_model(self) -> str:
+        if OLLAMA_MODEL:
+            return OLLAMA_MODEL
+
+        try:
+            response = requests.get(
+                f"{OLLAMA_BASE_URL}/api/tags",
+                timeout=5,
+            )
+
+            response.raise_for_status()
+
+            data = response.json()
+
+            models = data.get(
+                "models",
+                [],
+            )
+
+            if models:
+                name = models[0].get(
+                    "name",
+                    "",
+                )
+
+                if name:
+                    return name
+
+        except Exception:
+            pass
+
+        return ""
+
+    def is_available(self) -> bool:
+        if not self.model:
+            return False
+
+        try:
+            response = requests.get(
+                f"{OLLAMA_BASE_URL}/api/tags",
+                timeout=5,
+            )
+
+            return response.ok
+
+        except Exception:
+            return False
+
+    # ---------------------------------------------------------------
+    # Hard constraints
+    # ---------------------------------------------------------------
+
+    @staticmethod
+    def normalize_text(
+        value: Any,
+    ) -> str:
+        return " ".join(
+            str(value or "")
+            .lower()
+            .split()
+        )
+
+    @staticmethod
+    def parse_salary_lpa(
+        salary: str | None,
+    ) -> float | None:
+        if not salary:
+            return None
+
+        text = str(
+            salary
+        ).lower()
+
+        # Examples:
+        # ₹5-7 LPA
+        # 5 - 8 LPA
+        # 6 LPA
+        # INR 5.5 LPA
+
+        matches = re.findall(
+            r"(\d+(?:\.\d+)?)",
+            text,
+        )
+
+        if not matches:
+            return None
+
+        numbers = [
+            float(value)
+            for value in matches
+        ]
+
+        if "lpa" in text:
+            return min(numbers)
+
+        if "lakh" in text:
+            return min(numbers)
+
+        # Don't interpret arbitrary numbers
+        # such as job IDs as salary.
+        return None
+
+    @staticmethod
+    def parse_experience_years(
+        text: str,
+    ) -> float | None:
+        text = text.lower()
+
+        patterns = [
+            r"(\d+(?:\.\d+)?)\s*\+?\s*years?",
+            r"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*years?",
+            r"experience\s*[:\-]?\s*(\d+(?:\.\d+)?)",
+        ]
+
+        values = []
+
+        for pattern in patterns:
+            for match in re.finditer(
+                pattern,
+                text,
+            ):
+                try:
+                    values.append(
+                        float(
+                            match.group(1)
+                        )
+                    )
+                except Exception:
+                    continue
+
+        if not values:
+            return None
+
+        return min(values)
+
+    def check_location(
+        self,
+        job: Job,
+    ) -> bool:
+        job_location = self.normalize_text(
+            job.location
+        )
+
+        profile_locations = [
+            self.normalize_text(value)
+            for value in self.profile.get(
+                "locations",
+                [],
+            )
+        ]
+
+        configured_locations = [
+            self.normalize_text(value)
+            for value in [
+                "Coimbatore",
+                "Chennai",
+                "Bengaluru",
+                "Bangalore",
+                "Hyderabad",
+                "Pune",
+                "Gurugram",
+                "Gurgaon",
+                "Gujarat",
+            ]
+        ]
+
+        allowed = set(
+            profile_locations
+            + configured_locations
+        )
+
+        if "remote" in job_location:
+            return True
+
+        return any(
+            location in job_location
+            or job_location in location
+            for location in allowed
+            if location
+        )
+
+    def hard_constraint_check(
+        self,
+        job: Job,
+    ) -> dict:
+        """
+        Apply deterministic constraints.
+
+        IMPORTANT:
+        Experience is evaluated from the actual job
+        description/title only. We never scan unrelated
+        search-page/recommended-job content.
+        """
+
+        title = str(
+            job.title or ""
+        )
+
+        description = str(
+            job.description or ""
+        )
+
+        job_text = (
+            f"{title}\n"
+            f"{description}"
+        )
+
+        # ----------------------------------------------------------
+        # Salary
+        # ----------------------------------------------------------
+
+        salary = self.parse_salary_lpa(
+            job.salary
+        )
+
+        if salary is None:
+            salary = self.parse_salary_lpa(
+                description
+            )
+
+        salary_match = (
+            salary is not None
+            and salary >= MIN_SALARY_LPA
+        )
+
+        # ----------------------------------------------------------
+        # Location
+        # ----------------------------------------------------------
+
+        location_match = (
+            self.check_location(job)
+        )
+
+        # ----------------------------------------------------------
+        # Experience
+        # ----------------------------------------------------------
+
+        experience = (
+            job.experience_years
+        )
+
+        if experience is None:
+            experience = (
+                self.parse_experience_years(
+                    description
+                )
+            )
+
+        # Seniority must come from the actual job title
+        # or actual job description.
+        lower_title = (
+            title.lower()
+        )
+
+        lower_description = (
+            description.lower()
+        )
+
+        seniority_blocked = any(
+            term in lower_title
+            for term in [
+                "senior",
+                "sr.",
+                "sr ",
+                "lead",
+                "principal",
+                "architect",
+                "manager",
+                "director",
+                "head of",
+            ]
+        )
+
+        # Explicit years in the actual description.
+        explicit_experience_blocked = False
+
+        if experience is not None:
+            explicit_experience_blocked = (
+                experience
+                > MAX_EXPERIENCE_YEARS
+            )
+
+        if (
+            explicit_experience_blocked
+            or seniority_blocked
+        ):
+            experience_match = False
+
+        else:
+            # Unknown experience is NOT automatically treated
+            # as a mismatch.
+            #
+            # We allow the AI to inspect the actual description
+            # when no explicit experience requirement exists.
+            experience_match = True
+
+        return {
+            "salary": salary,
+            "experience": experience,
+            "salary_match": salary_match,
+            "experience_match": experience_match,
+            "location_match": location_match,
+        }
+
+    # ---------------------------------------------------------------
+    # Resume representation
+    # ---------------------------------------------------------------
+
+    def resume_text(self) -> str:
+        roles = self.profile.get(
+            "roles",
+            [],
+        )
+
+        skills = self.profile.get(
+            "skills",
+            [],
+        )
+
+        education = self.profile.get(
+            "education",
+            "",
+        )
+
+        experience = self.profile.get(
+            "experience",
+            "",
+        )
+
+        return f"""
+Candidate:
+{self.profile.get("name", "Candidate")}
+
+Headline:
+{self.profile.get("headline", "")}
+
+Roles:
+{", ".join(map(str, roles))}
+
+Skills:
+{", ".join(map(str, skills))}
+
+Education:
+{education}
+
+Experience:
+{experience}
+""".strip()
+
+    # ---------------------------------------------------------------
+    # AI prompt
+    # ---------------------------------------------------------------
+
+    def build_prompt(
+        self,
+        job: Job,
+        hard_checks: dict,
+    ) -> str:
+        return f"""
+You are an AI recruitment matching engine.
+
+Your task is to determine whether a candidate can reasonably
+apply to a real job based on the candidate's resume and the
+actual job listing.
+
+IMPORTANT RULES:
+
+1. Do NOT judge only from the job title.
+2. Read the responsibilities and required skills.
+3. A different job title is acceptable if the actual work is
+   strongly related to the candidate's technical capabilities.
+4. Do not invent candidate experience.
+5. Treat missing information as unknown.
+6. Senior/lead/principal/manager roles are generally unsuitable
+   for a candidate with 0-1 years experience unless the listing
+   clearly says otherwise.
+7. The candidate is targeting practical AI/ML/GenAI/software roles.
+8. The final score must be between 0 and 100.
+9. "apply" must be false when the job is clearly unrelated.
+10. "apply" must also be false if the hard constraints supplied
+    below fail.
+
+CANDIDATE RESUME
+----------------
+{self.resume_text()}
+
+JOB
+---
+Title:
+{job.title}
+
+Company:
+{job.company}
+
+Location:
+{job.location}
+
+Salary:
+{job.salary or "Unknown"}
+
+Experience:
+{job.experience_years if job.experience_years is not None else "Unknown"}
+
+Description:
+{job.description[:12000]}
+
+HARD CONSTRAINT ANALYSIS
+------------------------
+Salary match:
+{hard_checks["salary_match"]}
+
+Experience match:
+{hard_checks["experience_match"]}
+
+Location match:
+{hard_checks["location_match"]}
+
+Minimum salary:
+{MIN_SALARY_LPA} LPA
+
+Experience range:
+{MIN_EXPERIENCE_YEARS}-{MAX_EXPERIENCE_YEARS} years
+
+Return ONLY valid JSON:
+
+{{
+  "apply": true,
+  "score": 85,
+  "relevance": "high",
+  "matched_skills": [
+    "Python",
+    "Generative AI",
+    "RAG"
+  ],
+  "missing_skills": [
+    "Kubernetes"
+  ],
+  "reason": "Short factual explanation"
+}}
+
+No markdown.
+""".strip()
+
+    # ---------------------------------------------------------------
+    # AI call
+    # ---------------------------------------------------------------
+
+    def call_ai(
+        self,
+        prompt: str,
+    ) -> dict:
+        if not self.is_available():
+            raise RuntimeError(
+                "Ollama is not available. "
+                "Start Ollama and ensure at least "
+                "one local model is installed."
+            )
+
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json={
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+                "stream": False,
+                "format": "json",
+                "options": {
+                    "temperature": 0,
+                },
+            },
+            timeout=self.timeout,
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        content = (
+            data.get("message", {})
+            .get("content", "")
+        )
+
+        if not content:
+            raise RuntimeError(
+                "Ollama returned an empty response."
+            )
+
+        try:
+            return json.loads(
+                content
+            )
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"AI returned invalid JSON: "
+                f"{content[:500]}"
+            ) from exc
+
+    # ---------------------------------------------------------------
+    # Final decision
+    # ---------------------------------------------------------------
+
+    def analyze(
+        self,
+        job: Job,
+    ) -> AIJobDecision:
+        hard = self.hard_constraint_check(
+            job
+        )
+
+        # Hard constraints are never overridden by AI.
+        if not hard["location_match"]:
+            return AIJobDecision(
+                apply=False,
+                score=0,
+                relevance="none",
+                matched_skills=[],
+                missing_skills=[],
+                experience_match=False,
+                location_match=False,
+                salary_match=False,
+                reason="Location is outside the configured target locations.",
+                model="hard-filter",
+            )
+
+        if not hard["experience_match"]:
+            return AIJobDecision(
+                apply=False,
+                score=0,
+                relevance="low",
+                matched_skills=[],
+                missing_skills=[],
+                experience_match=False,
+                location_match=True,
+                salary_match=hard["salary_match"],
+                reason="Explicit experience/seniority requirement is outside the 0-1 year range.",
+                model="hard-filter",
+            )
+
+        if not hard["salary_match"]:
+            return AIJobDecision(
+                apply=False,
+                score=0,
+                relevance="low",
+                matched_skills=[],
+                missing_skills=[],
+                experience_match=True,
+                location_match=True,
+                salary_match=False,
+                reason="Salary is unknown or below the configured ₹5 LPA minimum.",
+                model="hard-filter",
+            )
+
+        prompt = self.build_prompt(
+            job,
+            hard,
+        )
+
+        result = self.call_ai(
+            prompt
+        )
+
+        score = int(
+            result.get(
+                "score",
+                0,
+            )
+        )
+
+        score = max(
+            0,
+            min(
+                100,
+                score,
+            ),
+        )
+
+        apply_value = bool(
+            result.get(
+                "apply",
+                False,
+            )
+        )
+
+        # AI cannot bypass the minimum score.
+        final_apply = (
+            apply_value
+            and score >= MIN_MATCH_SCORE
+            and hard["salary_match"]
+            and hard["experience_match"]
+            and hard["location_match"]
+        )
+
+        return AIJobDecision(
+            apply=final_apply,
+            score=score,
+            relevance=str(
+                result.get(
+                    "relevance",
+                    "unknown",
+                )
+            ),
+            matched_skills=[
+                str(value)
+                for value in result.get(
+                    "matched_skills",
+                    [],
+                )
+            ],
+            missing_skills=[
+                str(value)
+                for value in result.get(
+                    "missing_skills",
+                    [],
+                )
+            ],
+            experience_match=hard[
+                "experience_match"
+            ],
+            location_match=hard[
+                "location_match"
+            ],
+            salary_match=hard[
+                "salary_match"
+            ],
+            reason=str(
+                result.get(
+                    "reason",
+                    "",
+                )
+            ),
+            model=self.model,
+        )
+
+
+def analyze_job(
+    job: Job,
+) -> AIJobDecision:
+    analyzer = AIJobAnalyzer()
+    return analyzer.analyze(
+        job
+    )

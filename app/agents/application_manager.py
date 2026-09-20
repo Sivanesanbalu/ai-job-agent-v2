@@ -1,0 +1,209 @@
+from app.services.application_repository import record_application_attempt
+from app.services.database import get_connection
+from app.services.job_repository import update_application_status
+
+
+ALLOWED_TRANSITIONS = {
+    "discovered": {
+        "application_candidate",
+        "rejected_by_user",
+    },
+
+    # Allow previously verification-blocked jobs to be
+    # reconsidered during a later autonomous run.
+    "verification_required": {
+        "application_candidate",
+        "rejected_by_user",
+    },
+
+    # Allow previously invalid pages to be reconsidered later.
+    "invalid_job_page": {
+        "application_candidate",
+        "rejected_by_user",
+    },
+
+    "application_candidate": {
+        "needs_human_review",
+        "rejected_by_user",
+    },
+
+    "needs_human_review": {
+        "approved_for_application",
+        "rejected_by_user",
+    },
+
+    "approved_for_application": {
+        "application_started",
+        "rejected_by_user",
+    },
+
+    "application_started": {
+        "ready_for_submission",
+        "failed",
+    },
+
+    "ready_for_submission": {
+        "submitted",
+        "failed",
+    },
+}
+
+
+def _get_current_status(job_url: str) -> str:
+    connection = get_connection()
+
+    row = connection.execute(
+        """
+        SELECT application_status
+        FROM jobs
+        WHERE url = ?
+        """,
+        (job_url,),
+    ).fetchone()
+
+    connection.close()
+
+    if row is None:
+        raise ValueError("Job not found")
+
+    return row["application_status"]
+
+
+def transition_application_status(
+    job_url: str,
+    new_status: str,
+    message: str = "",
+) -> None:
+    current_status = _get_current_status(job_url)
+
+    allowed_statuses = ALLOWED_TRANSITIONS.get(
+        current_status,
+        set(),
+    )
+
+    if new_status not in allowed_statuses:
+        raise ValueError(
+            f"Invalid application transition: "
+            f"{current_status} -> {new_status}"
+        )
+
+    update_application_status(
+        job_url,
+        new_status,
+    )
+
+    if message:
+        record_application_attempt(
+            job_url,
+            new_status,
+            message,
+        )
+
+
+def start_application(job_url: str) -> None:
+    transition_application_status(
+        job_url,
+        "application_started",
+        "Application workflow started",
+    )
+
+
+def mark_ready_for_submission(job_url: str) -> None:
+    transition_application_status(
+        job_url,
+        "ready_for_submission",
+        "Application prepared and ready for submission",
+    )
+
+
+def mark_application_applied(job_url: str) -> None:
+    transition_application_status(
+        job_url,
+        "submitted",
+        "Application marked as completed",
+    )
+
+
+def mark_application_failed(
+    job_url: str,
+    message: str,
+) -> None:
+    current_status = _get_current_status(job_url)
+
+    if current_status not in {
+        "application_started",
+        "ready_for_submission",
+    }:
+        raise ValueError(
+            f"Cannot mark application as failed from status: "
+            f"{current_status}"
+        )
+
+    update_application_status(
+        job_url,
+        "failed",
+    )
+
+    record_application_attempt(
+        job_url,
+        "failed",
+        message,
+    )
+
+
+def require_human_review(
+    job_url: str,
+    message: str,
+) -> None:
+    current_status = _get_current_status(job_url)
+
+    if current_status not in {
+        "application_candidate",
+    }:
+        raise ValueError(
+            f"Cannot request human review from status: "
+            f"{current_status}"
+        )
+
+    transition_application_status(
+        job_url,
+        "needs_human_review",
+        message,
+    )
+
+
+def approve_application(
+    job_url: str,
+    message: str = "Application approved by human reviewer",
+) -> None:
+    transition_application_status(
+        job_url,
+        "approved_for_application",
+        message,
+    )
+
+
+def reject_application(job_url: str) -> None:
+    current_status = _get_current_status(job_url)
+
+    if current_status not in {
+        "discovered",
+        "application_candidate",
+        "needs_human_review",
+        "approved_for_application",
+    }:
+        raise ValueError(
+            f"Cannot reject application from status: "
+            f"{current_status}"
+        )
+
+    update_application_status(
+        job_url,
+        "rejected_by_user",
+    )
+
+    record_application_attempt(
+        job_url,
+        "rejected",
+        "Application rejected by human reviewer",
+    )
