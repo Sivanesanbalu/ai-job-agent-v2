@@ -109,9 +109,20 @@ class BrowserEngine:
 
         self.playwright = sync_playwright().start()
 
-        self.browser = self.playwright.chromium.launch(
-            headless=self.headless,
-        )
+        try:
+            self.browser = self.playwright.chromium.launch(
+                headless=self.headless,
+            )
+        except Exception as e:
+            if "Executable doesn't exist" in str(e) or "playwright install" in str(e):
+                import subprocess, sys
+                logger.info("Playwright browser executable missing. Installing chromium automatically...")
+                subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+                self.browser = self.playwright.chromium.launch(
+                    headless=self.headless,
+                )
+            else:
+                raise e
 
         if self.user_id:
             user_data_dir = Path("data/browser_sessions") / str(self.user_id)

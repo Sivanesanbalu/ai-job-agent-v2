@@ -85,11 +85,19 @@ class PortalJobDiscovery:
     def start(self) -> None:
         self.playwright = sync_playwright().start()
 
-        self.browser = (
-            self.playwright.chromium.launch(
+        try:
+            self.browser = self.playwright.chromium.launch(
                 headless=self.headless,
             )
-        )
+        except Exception as e:
+            if "Executable doesn't exist" in str(e) or "playwright install" in str(e):
+                import subprocess, sys
+                subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+                self.browser = self.playwright.chromium.launch(
+                    headless=self.headless,
+                )
+            else:
+                raise e
 
         self.context = (
             self.browser.new_context(
